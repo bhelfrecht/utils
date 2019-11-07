@@ -201,7 +201,7 @@ class SparseKPCA(object):
 
         # Compute projection matrix
         self.V = np.matmul(self.Vm, np.diagflat(1.0/np.sqrt(self.Um)))
-        self.V = np.matmul(V, self.Vc)
+        self.V = np.matmul(self.V, self.Vc)
 
     def transform(self, KNM):
         """

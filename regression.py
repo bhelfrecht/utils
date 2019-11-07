@@ -153,11 +153,11 @@ class SparseKRR(object):
         """
     
         # Compute max eigenvalue of regularized model
-        Kreg = self.sigma*KMM + np.matmul(KNM.T, KNM)
+        K = self.sigma*KMM + np.matmul(KNM.T, KNM)
         maxeig = np.amax(np.linalg.eigvalsh(K))
 
         # Use max eigenvalue as additional regularization
-        Kreg += np.eye(KMM.shape[0])*maxeig*self.jitter
+        K += np.eye(KMM.shape[0])*maxeig*self.jitter
 
         YY = np.matmul(KNM.T, Y)
 
@@ -176,10 +176,10 @@ class SparseKRR(object):
 
         """
 
-        if w is None:
+        if self.w is None:
             print("Error: must fit the KRR model before transforming")
         else:
-            Yp = np.matmul(KNM, w)
+            Yp = np.matmul(KNM, self.w)
             
             return Yp
 
@@ -236,7 +236,7 @@ class PCovR(object):
         # Compute predicted Y
         Yhat = np.linalg.pinv(np.matmul(X.T, X))
         Yhat = np.matmul(X, Yhat)
-        Yhat = np.matmul(Yhat, X)
+        Yhat = np.matmul(Yhat, X.T)
         Yhat = np.matmul(Yhat, Y)
 
         return Yhat
@@ -250,6 +250,8 @@ class PCovR(object):
             Y: dependent (response) variable data
             tiny: threshold for discarding small eigenvalues
         """
+
+        # TODO: use n_pca to truncate
 
         # Compute LR approximation of Y
         Yhat = self._Y(X, Y)
@@ -317,9 +319,7 @@ class PCovR(object):
         S_pca = C/np.trace(C)
         S_lr = np.matmul(C_inv_sqrt, X.T)
         S_lr = np.matmul(S_lr, Yhat)
-        S_lr = np.matmul(S_lr, Yhat.T)
-        S_lr = np.matmul(S_lr, X)
-        S_lr = np.matmul(S_lr, C_inv_sqrt)/np.linalg.norm(Y)**2
+        S_lr = np.matmul(S_lr, S_lr.T)/np.linalg.norm(Y)**2
 
         S = self.alpha*S_pca + (1.0-self.alpha)*S_lr
 
