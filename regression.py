@@ -251,7 +251,8 @@ class PCovR(object):
             tiny: threshold for discarding small eigenvalues
         """
 
-        # TODO: use n_pca to truncate
+        if len(Y.shape) == 1:
+            Y = Y.reshape((-1, 1))
 
         # Compute LR approximation of Y
         Yhat = self._Y(X, Y)
@@ -268,6 +269,9 @@ class PCovR(object):
         self.V = self.V[:, self.U > tiny]
         self.U = self.U[self.U > tiny]
 
+        self.V = self.V[:, 0:self.n_pca]
+        self.U = self.U[0:self.n_pca]
+
         # Compute projections (component scores)
         T = np.matmul(self.V, np.diagflat(np.sqrt(self.U)))
 
@@ -276,7 +280,7 @@ class PCovR(object):
         W_lr = np.linalg.pinv(np.matmul(X.T, X))
         W_lr = np.matmul(W_lr, X.T)
         W_lr = np.matmul(W_lr, Y)
-        W_lr = np.matmul(W_lr, Yhat)
+        W_lr = np.matmul(W_lr, Yhat.T)/np.linalg.norm(Y)**2
         self.W = self.alpha*W_pca + (1.0-self.alpha)*W_lr
         self.W = np.matmul(self.W, self.V)
         self.W = np.matmul(self.W, np.diagflat(1.0/np.sqrt(self.U)))
@@ -297,6 +301,11 @@ class PCovR(object):
             Y: dependent (response) variable data
             tiny: threshold for discarding small eigenvalues
         """
+
+        # TODO: use n_pca to truncate
+
+        if len(Y.shape) == 1:
+            Y = Y.reshape((-1, 1))
 
         # Compute LR approximation of Y
         Yhat = self._Y(X, Y)
@@ -330,6 +339,9 @@ class PCovR(object):
         self.V = self.V[:, self.U > tiny]
         self.U = self.U[self.U > tiny]
 
+        self.V = self.V[:, 0:self.n_pca]
+        self.U = self.U[0:self.n_pca]
+
         # Compute component weights
         self.W = np.matmul(C_inv_sqrt, self.V)
         self.W = np.matmul(self.W, np.diagflat(np.sqrt(self.U)))
@@ -359,9 +371,11 @@ class PCovR(object):
         if self.W is None:
             print("Error: must fit the PCovR model before transforming")
         else:
-            T = np.matmul(X, self.W)*np.linalg.norm(X)
-            Px = np.matmul(T.T, X)
+            T = np.matmul(X, self.W)
+            Px = np.matmul(np.diagflat(1.0/self.U), T.T)
+            Px = np.matmul(Px, X)
             Xr = np.matmul(T, Px)
+            T *= np.linalg.norm(X)
             
             return T, Xr
 
@@ -429,6 +443,7 @@ class KPCovR(object):
     def __init__(self, alpha=0.0, n_kpca=None, jitter=1E-12):
         self.alpha = alpha
         self.n_kpca = n_kpca
+        self.jitter = jitter
         self.U = None
         self.V = None
         self.W = None
@@ -447,7 +462,7 @@ class KPCovR(object):
         """
 
         # Compute predicted Y # TODO: replace inverse with np.linalg.solve
-        Yhat = np.linalg.pinv(K + np.eye(K.shape[0])*jitter)
+        Yhat = np.linalg.pinv(K + np.eye(K.shape[0])*self.jitter)
         Yhat = np.matmul(K, Yhat)
         Yhat = np.matmul(Yhat, Y)
 
@@ -463,8 +478,11 @@ class KPCovR(object):
             tiny: threshold for discarding small eigenvalues
         """
 
+        if len(Y.shape) == 1:
+            Y = Y.reshape((-1, 1))
+
         # Compute predicted Y
-        Yhat = _Y(K, Y)
+        Yhat = self._Y(K, Y)
 
         # Compute G
         G_kpca = K/np.trace(K)
@@ -478,13 +496,16 @@ class KPCovR(object):
         self.V = self.V[:, self.U > tiny]
         self.U = self.U[self.U > tiny]
 
+        self.V = self.V[:, 0:self.n_kpca]
+        self.U = self.U[0:self.n_kpca]
+
         # Compute component scores
         T = np.matmul(self.V, np.diagflat(np.sqrt(self.U)))
 
         # Compute component weights
         W_kpca = np.eye(K.shape[0])/np.trace(K)
-        W_krr = np.linalg.pinv(K + np.eye(K.shape[0])*jitter)
-        W_krr = np.matmul(W_krr, Yhat)
+        W_krr = np.linalg.pinv(K + np.eye(K.shape[0])*self.jitter)
+        W_krr = np.matmul(W_krr, Yhat)/np.linalg.norm(Y)**2
 
         self.W = self.alpha*W_kpca + (1.0 - self.alpha)*W_krr
         self.W = np.matmul(self.W, self.V)
@@ -492,10 +513,10 @@ class KPCovR(object):
 
         # Compute regression parameters
         Py = np.matmul(np.diagflat(1.0/self.U), T.T)
-        Py = np.matmul(P, Y)
+        Py = np.matmul(Py, Y)
 
         # Compute regression weights
-        B = np.matmul(self.W, Py)
+        self.B = np.matmul(self.W, Py)
 
     def transform_K(self, K):
         """
@@ -511,7 +532,7 @@ class KPCovR(object):
         if self.W is None:
             print("Error: must fit the PCovR model before transforming")
         else:
-            T = np.matmul(K, self.W)*np.trace(K)
+            T = np.matmul(K, self.W)*np.sqrt(np.trace(K))
 
             # TODO: reconstruct X
             
@@ -578,12 +599,18 @@ class SparseKPCovR(object):
             tiny: threshold for discarding small eigenvalues
         """
 
+        if len(Y.shape) == 1:
+            Y = Y.reshape((-1, 1))
+
         # Compute eigendecomposition of KMM
         self.U, self.V = np.linalg.eigh(KMM)
         self.U = np.flip(self.U, axis=0)
         self.V = np.flip(self.V, axis=1)
         self.V = self.V[:, self.U > tiny]
         self.U = self.U[self.U > tiny]
+
+        self.V = self.V[:, 0:self.n_kpca]
+        self.U = self.U[0:self.n_kpca]
 
         # Compute the feature space data
         self.phi = np.matmul(KNM, self.V)
@@ -603,17 +630,17 @@ class SparseKPCovR(object):
 
         # Compute the LR prediction of Y, since we already have
         # the feature space representation
-        Yhat = np.matmul(phi, w)
+        w = np.linalg.solve(C, np.matmul(self.phi.T, Y))
+        Yhat = np.matmul(self.phi, w)
 
         # Compute the S matrix
         S_kpca = C/np.trace(C)
-        w = np.linalg.solve(C, np.matmul(phi.T, Y))
 
-        S_lr = np.matmul(C_inv_sqrt, phi.T)
+        S_lr = np.matmul(C_inv_sqrt, self.phi.T)
         S_lr = np.matmul(S_lr, Yhat)
         S_lr = np.matmul(S_lr, S_lr.T)/np.linalg.norm(Y)**2
 
-        S = self.alpha*S_kpca + (1.0 - alpha)*S_lr
+        S = self.alpha*S_kpca + (1.0 - self.alpha)*S_lr
 
         # Compute eigendecomposition of S
         Us, Vs = np.linalg.eigh(S)
@@ -623,19 +650,18 @@ class SparseKPCovR(object):
         Us = Us[Us > tiny]
 
         # Compute component weights
-        self.W = np.matmul(C_inv_sqrt, Us)
+        self.W = np.matmul(C_inv_sqrt, Vs)
         self.W = np.matmul(self.W, np.diagflat(np.sqrt(Us)))
 
         # Compute component scores
-        T = np.matmul(phi, self.W)
+        T = np.matmul(self.phi, self.W)
 
         # Compute regression parameters
-        Py = np.matmul(np.diagflat(1.0/Us))
-        Py = np.matmul(Py, T.T)
+        Py = np.matmul(np.diagflat(1.0/Us), T.T)
         Py = np.matmul(Py, Y)
 
         # Compute regression weights
-        self.B = np.matmul(self.W, P)
+        self.B = np.matmul(self.W, Py)
 
     def transform_K(self, KNM):
         """
@@ -653,7 +679,7 @@ class SparseKPCovR(object):
             # Compute the KPCA-like projections
             Xp = np.matmul(KNM, self.V)
             Xp = np.matmul(Xp, np.diagflat(1.0/np.sqrt(self.U)))
-            Xp = np.matmul(Xp, self.W)*np.linalg.norm(np.matmul(KNM, self.phi))
+            Xp = np.matmul(Xp, self.W)*np.linalg.norm(self.phi) 
 
             return Xp
 
