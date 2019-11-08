@@ -60,10 +60,10 @@ def center_kernel(K, Kref=None):
         Kref = K
 
     if K.shape[1] != Kref.shape[0] or Kref.shape[0] != Kref.shape[1]:
-        print("Error: kernels must have compatible shapes" \
+        print("Error: kernels must have compatible shapes " \
                 + "and the reference kernel must be square")
     else:
-        oneN = np.ones((K.shape[0], K.shape[0]))/K.shape[1]
+        oneN = np.ones((K.shape[0], K.shape[1]))/K.shape[1]
         oneM = np.ones((K.shape[1], K.shape[1]))/K.shape[1]
 
         Kc = K - np.matmul(oneN, Kref) - np.matmul(K, oneM) \
