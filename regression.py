@@ -22,6 +22,7 @@ class LR(object):
     def __init__(self):
         self.w = None
 
+    # TODO: include jitter
     def fit(self, X, Y):
         """
             Fits the linear regression model
@@ -32,7 +33,7 @@ class LR(object):
         """
 
         # Compute inverse of covariance
-        XTX = np.linalg.pinv(np.matmul(X.T, X))
+        XTX = np.linalg.inv(np.matmul(X.T, X))
 
         # Compute LR solution
         self.w = np.matmul(XTX, X.T)
@@ -234,7 +235,7 @@ class PCovR(object):
         """
 
         # Compute predicted Y
-        Yhat = np.linalg.pinv(np.matmul(X.T, X))
+        Yhat = np.linalg.inv(np.matmul(X.T, X))
         Yhat = np.matmul(X, Yhat)
         Yhat = np.matmul(Yhat, X.T)
         Yhat = np.matmul(Yhat, Y)
@@ -277,7 +278,7 @@ class PCovR(object):
 
         # Compute component weights
         W_pca = X.T/np.linalg.norm(X)**2 
-        W_lr = np.linalg.pinv(np.matmul(X.T, X))
+        W_lr = np.linalg.inv(np.matmul(X.T, X))
         W_lr = np.matmul(W_lr, X.T)
         W_lr = np.matmul(W_lr, Y)
         W_lr = np.matmul(W_lr, Yhat.T)/np.linalg.norm(Y)**2
@@ -301,8 +302,6 @@ class PCovR(object):
             Y: dependent (response) variable data
             tiny: threshold for discarding small eigenvalues
         """
-
-        # TODO: use n_pca to truncate
 
         if len(Y.shape) == 1:
             Y = Y.reshape((-1, 1))
@@ -461,10 +460,8 @@ class KPCovR(object):
             Yhat: KRR prediction of Y
         """
 
-        # Compute predicted Y # TODO: replace inverse with np.linalg.solve
-        Yhat = np.linalg.pinv(K + np.eye(K.shape[0])*self.jitter)
+        Yhat = np.linalg.solve(K + np.eye(K.shape[0])*self.jitter, Y)
         Yhat = np.matmul(K, Yhat)
-        Yhat = np.matmul(Yhat, Y)
 
         return Yhat
 
@@ -504,8 +501,8 @@ class KPCovR(object):
 
         # Compute component weights
         W_kpca = np.eye(K.shape[0])/np.trace(K)
-        W_krr = np.linalg.pinv(K + np.eye(K.shape[0])*self.jitter)
-        W_krr = np.matmul(W_krr, Yhat)/np.linalg.norm(Y)**2
+        W_krr = np.linalg.solve(K + np.eye(K.shape[0])*self.jitter, Yhat)
+        W_krr = np.matmul(W_krr, Yhat.T)/np.linalg.norm(Y)**2
 
         self.W = self.alpha*W_kpca + (1.0 - self.alpha)*W_krr
         self.W = np.matmul(self.W, self.V)
