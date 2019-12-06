@@ -34,6 +34,13 @@ def FPS(X, n=0):
         fps_idxs[i] = np.argmax(d1)
         d[i-1] = np.amax(d1)
 
+        # Exit if we have exhausted the unique points
+        # (in which case we select a point we have selected before)
+        if fps_idxs[i] in fps_idxs[0:i]:
+            fps_idxs = fps_idxs[0:i]
+            d = d[0:i]
+            break
+
         # Compute distance from all points to the selected point
         d2 = np.linalg.norm(X-X[fps_idxs[i]], axis=1)**2
 
