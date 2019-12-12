@@ -37,14 +37,14 @@ def gaussian_kernel(XA, XB, gamma=1):
     K = np.exp(-gamma*D)
     return K
 
-def center_kernel(K, Kref=None):
+def center_kernel(K, K_ref=None):
     """
         Centers a kernel matrix
         (written with assistance from Michele Ceriotti)
 
         ---Arguments---
         K: the kernel to center
-        Kref: reference (training) kernel
+        K_ref: reference (training) kernel
 
         ---Returns---
         Kc: the centered kernel
@@ -56,17 +56,17 @@ def center_kernel(K, Kref=None):
 
     """
 
-    if Kref is None:
-        Kref = K
+    if K_ref is None:
+        K_ref = K
 
-    if K.shape[1] != Kref.shape[0] or Kref.shape[0] != Kref.shape[1]:
+    if K.shape[1] != K_ref.shape[0] or K_ref.shape[0] != K_ref.shape[1]:
         print("Error: kernels must have compatible shapes " \
                 + "and the reference kernel must be square")
     else:
-        oneN = np.ones((K.shape[0], K.shape[1]))/K.shape[1]
-        oneM = np.ones((K.shape[1], K.shape[1]))/K.shape[1]
+        oneNM = np.ones((K.shape[0], K.shape[1]))/K.shape[1]
+        oneMM = np.ones((K.shape[1], K.shape[1]))/K.shape[1]
 
-        Kc = K - np.matmul(oneN, Kref) - np.matmul(K, oneM) \
-                + np.matmul(np.matmul(oneN, Kref), oneM)
+        Kc = K - np.matmul(oneNM, K_ref) - np.matmul(K, oneMM) \
+                + np.matmul(np.matmul(oneNM, K_ref), oneMM)
 
         return Kc

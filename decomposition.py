@@ -3,6 +3,7 @@
 import os
 import sys
 import numpy as np
+from kernels import center_kernel
 
 class PCA(object):
     """
@@ -89,7 +90,7 @@ class KPCA(object):
             Advances in Neural Information Processing Systems 13, 633-639, 2001  
     """
     
-    def __init__(self, n_kpca):
+    def __init__(self, n_kpca=None):
         self.n_kpca = n_kpca
         self.U = None
         self.V = None
@@ -136,6 +137,7 @@ class SparseKPCA(object):
         
         ---Attributes---
         n_kpca: number of principal components to retain
+        T_mean: the column means of the approximate feature space
         Um: eigenvectors of KMM
         Vm: eigenvalues of KMM
         Uc: eigenvalues of the covariance of T
@@ -159,6 +161,7 @@ class SparseKPCA(object):
     
     def __init__(self, n_kpca=None):
         self.n_kpca = n_kpca
+        self.T_mean = None
         self.Um = None
         self.Vm = None
         self.Uc = None
@@ -189,6 +192,10 @@ class SparseKPCA(object):
         T = np.matmul(KNM, self.Vm)
         T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.Um)))
 
+        # Center the feature space
+        self.T_mean = np.mean(T, axis=0)
+        T -= self.T_mean
+
         # Compute covariance of projections, since the eigenvectors
         # of KMM are not necessarily uncorrelated for the whole
         # training set KNM
@@ -218,5 +225,7 @@ class SparseKPCA(object):
         if self.V is None:
             print("Error: must fit the KPCA before transforming")
         else:
-            T = np.matmul(KNM, self.V[:, 0:self.n_kpca])
-            return T
+            #T = np.matmul(KNM, self.V[:, 0:self.n_kpca])
+            T = np.matmul(KNM, self.V)
+            T -= np.matmul(self.T_mean, self.Vc)
+            return T[:, 0:self.n_kpca]
