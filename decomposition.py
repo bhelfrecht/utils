@@ -77,6 +77,7 @@ class KPCA(object):
         
         ---Attributes---
         n_kpca: number of principal components to retain in the decomposition
+        tiny: threshold for discarding small eigenvalues
         U: eigenvalues of the kernel matrix
         V: eigenvectors of the kernel matrix
         
@@ -90,8 +91,9 @@ class KPCA(object):
             Advances in Neural Information Processing Systems 13, 633-639, 2001  
     """
     
-    def __init__(self, n_kpca=None):
+    def __init__(self, n_kpca=None, tiny=1.0E-15):
         self.n_kpca = n_kpca
+        self.tiny = tiny
         self.U = None
         self.V = None
     
@@ -107,8 +109,8 @@ class KPCA(object):
         self.U, self.V = np.linalg.eigh(K)
         self.U = np.flip(self.U, axis=0)
         self.V = np.flip(self.V, axis=1)
-        self.V = self.V[:, self.U > 0]
-        self.U = self.U[self.U > 0]
+        self.V = self.V[:, self.U > self.tiny]
+        self.U = self.U[self.U > self.tiny]
     
     def transform(self, K):
         """
@@ -138,6 +140,10 @@ class SparseKPCA(object):
         ---Attributes---
         n_kpca: number of principal components to retain
         T_mean: the column means of the approximate feature space
+        tiny: threshold for discarding small eigenvalues
+        KNM_mean: auxiliary centering of the kernel matrix
+            because the centering must be based on the
+            feature space, which is approximated
         Um: eigenvectors of KMM
         Vm: eigenvalues of KMM
         Uc: eigenvalues of the covariance of T
@@ -159,9 +165,10 @@ class SparseKPCA(object):
             on Machine Learning, 1232-1239, 2008
     """
     
-    def __init__(self, n_kpca=None):
+    def __init__(self, n_kpca=None, tiny=1.0E-15):
         self.n_kpca = n_kpca
-        self.T_mean = None
+        self.tiny = tiny
+        self.KNM_mean = None
         self.Um = None
         self.Vm = None
         self.Uc = None
@@ -178,23 +185,20 @@ class SparseKPCA(object):
             KMM: centered kernel between the representative points
         """
 
-        # Limit for zero eigenvalues to throw away
-        tiny = 0.0 #1.0E-15
+        # Auxiliary centering of KNM
+        # since we are working with an approximate feature space
+        self.KNM_mean = np.mean(KNM, axis=0)
 
         # Compute eigendecomposition on KMM
         self.Um, self.Vm = np.linalg.eigh(KMM)
         self.Um = np.flip(self.Um, axis=0)
         self.Vm = np.flip(self.Vm, axis=1)
-        self.Vm = self.Vm[:, self.Um > tiny]
-        self.Um = self.Um[self.Um > tiny]
+        self.Vm = self.Vm[:, self.Um > self.tiny]
+        self.Um = self.Um[self.Um > self.tiny]
             
         # Compute a KPCA based on the eigendecomposition of KMM
-        T = np.matmul(KNM, self.Vm)
+        T = np.matmul(KNM-self.KNM_mean, self.Vm)
         T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.Um)))
-
-        # Center the feature space
-        self.T_mean = np.mean(T, axis=0)
-        T -= self.T_mean
 
         # Compute covariance of projections, since the eigenvectors
         # of KMM are not necessarily uncorrelated for the whole
@@ -225,7 +229,5 @@ class SparseKPCA(object):
         if self.V is None:
             print("Error: must fit the KPCA before transforming")
         else:
-            #T = np.matmul(KNM, self.V[:, 0:self.n_kpca])
-            T = np.matmul(KNM, self.V)
-            T -= np.matmul(self.T_mean, self.Vc)
+            T = np.matmul(KNM-self.KNM_mean, self.V)
             return T[:, 0:self.n_kpca]
