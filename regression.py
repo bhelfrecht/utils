@@ -29,8 +29,8 @@ class LR(object):
             Fits the linear regression model
 
             ---Arguments---
-            X: centered, independent (predictor) variable
-            Y: centered, dependent (response) variable
+            X: centered independent (predictor) variable
+            Y: centered dependent (response) variable
         """
 
         # Compute inverse of covariance
@@ -52,10 +52,10 @@ class LR(object):
             Computes predicted Y values
 
             ---Arguments---
-            X: centered, independent (predictor) variable
+            X: centered independent (predictor) variable
             
             ---Returns---
-            Yp: predicted Y values
+            Yp: centered predicted Y values
         """
 
         if self.W is None:
@@ -95,8 +95,8 @@ class KRR(object):
             Fits the KRR model by computing the regression weights
 
             ---Arguments---
-            K: kernel between training data
-            Y: property values
+            K: centered kernel between training data
+            Y: centered property values
         """
 
         # Compute maximum eigenvalue of kernel matrix
@@ -113,10 +113,10 @@ class KRR(object):
             Computes predicted Y values
 
             ---Arguments---
-            K: kernel matrix between training and testing data
+            K: centered kernel matrix between training and testing data
 
             ---Returns---
-            Yp: predicted Y values
+            Yp: centered predicted Y values
 
         """
 
@@ -164,9 +164,9 @@ class SparseKRR(object):
             Fits the KRR model by computing the regression weights
 
             ---Arguments---
-            KNM: kernel between the whole dataset and the representative points
-            KMM: kernel between the representative points
-            Y: property values
+            KNM: centered kernel between the whole dataset and the representative points
+            KMM: centered kernel between the representative points
+            Y: centered property values
         """
     
         # Compute max eigenvalue of regularized model
@@ -186,10 +186,10 @@ class SparseKRR(object):
             Computes predicted Y values
 
             ---Arguments---
-            K: kernel matrix between training and testing data
+            K: centered kernel matrix between training and testing data
 
             ---Returns---
-            Yp: predicted Y values
+            Yp: centered predicted Y values
 
         """
 
@@ -220,7 +220,8 @@ class PCovR(object):
         _YW: computes the LR predicted Y and weights
         fit_structure_space: fits the PCovR model for features > samples
         fit_feature_space: fits the PCovR model for samples > features
-        transform_X: computes the reconstructed and projected X
+        transform_X: computes the projected X
+        inverse_transform_X: computes the reconstructed X
         transform_Y: computes the projected Y
         loss: computes the components of the loss functions
 
@@ -251,11 +252,11 @@ class PCovR(object):
             Compute the linear regression prediction of Y
 
             ---Arguments---
-            X: independent (predictor) variable data
-            Y: dependent (response) variable data
+            X: centered independent (predictor) variable data
+            Y: centered dependent (response) variable data
 
             ---Returns---
-            Yhat: linear regression prediction of Y
+            Yhat: centered linear regression prediction of Y
             W: linear regression weights
         """
 
@@ -272,8 +273,8 @@ class PCovR(object):
             Fit the PCovR model for features > samples
 
             ---Arguments---
-            X: independent (predictor) variable data
-            Y: dependent (response) variable data
+            X: centered independent (predictor) variable data
+            Y: centered dependent (response) variable data
         """
 
         if len(Y.shape) == 1:
@@ -322,8 +323,8 @@ class PCovR(object):
             Fit the PCovR model for samples > features 
 
             ---Arguments---
-            X: independent (predictor) variable data
-            Y: dependent (response) variable data
+            X: centered independent (predictor) variable data
+            Y: centered dependent (response) variable data
         """
 
         if len(Y.shape) == 1:
@@ -391,10 +392,10 @@ class PCovR(object):
             Compute the projection of X
 
             ---Arguments---
-            X: data to project
+            X: centered data to project
 
             ---Returns---
-            T: projection of X
+            T: centered projection of X
         """
 
         if self.Pxt is None:
@@ -409,10 +410,10 @@ class PCovR(object):
             Compute the reconstruction of X
 
             ---Arguments---
-            X: data to reconstruct
+            X: centered data to reconstruct
 
             ---Returns---
-            Xr: reconstruction of X
+            Xr: centered reconstruction of X
         """
 
         if self.Ptx is None:
@@ -428,10 +429,10 @@ class PCovR(object):
             Compute the projection (prediction) of Y
 
             ---Arguments---
-            X: predictor data for Y
+            X: centered predictor data for Y
 
             ---Returns---
-            Yp: predicted Y values
+            Yp: centered predicted Y values
         """
 
         if self.Pty is None:
@@ -449,8 +450,8 @@ class PCovR(object):
             Compute the PCA and LR loss functions
 
             ---Arguments---
-            X: independent (predictor) data
-            Y: dependent (response) data
+            X: centered independent (predictor) data
+            Y: centered dependent (response) data
 
             ---Returns---
             L_pca: PCA loss
@@ -490,7 +491,10 @@ class KPCovR(object):
         ---Methods---
         _YW: computes the KRR prediction of Y and weights
         fit: fits the KPCovR model
-        transform_K: transforms the kernel data into KPCA space
+        transform_K: transforms the kernel data into the latent space
+        inverse_transform_K: computes the reconstructed kernel
+        inverse_transform_X: computes the reconstructed original data
+            (if provided during the fit)
         transform_Y: yields predicted Y values based on KRR
 
     """
@@ -513,11 +517,11 @@ class KPCovR(object):
             Computes the KRR prediction of Y
 
             ---Arguments---
-            K: kernel matrix
-            Y: dependent (response) data
+            K: centered kernel matrix
+            Y: centered dependent (response) data
 
             ---Returns---
-            Yhat: KRR prediction of Y
+            Yhat: centered KRR prediction of Y
             W: regression weights
         """
 
@@ -534,9 +538,9 @@ class KPCovR(object):
             Fits the KPCovR model
 
             ---Arguments---
-            K: kernel matrix
-            Y: dependent (response) data
-            X: original independent (predictor) data
+            K: centered kernel matrix
+            Y: centered dependent (response) data
+            X: centered original independent (predictor) data
         """
 
         if len(Y.shape) == 1:
@@ -590,10 +594,10 @@ class KPCovR(object):
             Transform the data into KPCA space
 
             ---Arguments---
-            K: kernel matrix
+            K: centered kernel matrix
 
             ---Returns---
-            T: the KPCA-like projection
+            T: centered KPCA-like projection
         """
 
         if self.Pkt is None:
@@ -608,10 +612,10 @@ class KPCovR(object):
             Compute the reconstruction of the kernel
 
             ---Arguments---
-            K: kernel matrix
+            K: centered kernel matrix
 
             ---Returns---
-            Kr: the reconstructed kernel
+            Kr: the centered reconstructed kernel
         """
 
         if self.Ptk is None:
@@ -627,10 +631,10 @@ class KPCovR(object):
             Compute the reconstruction of the original X data
 
             ---Arguments---
-            K: kernel matrix
+            K: centered kernel matrix
 
             ---Returns---
-            Xr: the reconstructed X data
+            Xr: centered reconstructed X data
         """
 
         if self.Ptx is None:
@@ -646,10 +650,10 @@ class KPCovR(object):
             Compute the predicted Y values
 
             ---Arguments---
-            K: kernel matrix
+            K: centered kernel matrix
 
             ---Returns---
-            Yp: predicted Y values
+            Yp: centered predicted Y values
         """
 
         if self.Pty is None:
@@ -667,8 +671,8 @@ class KPCovR(object):
             Compute the KPCA and KRR loss functions
 
             ---Arguments---
-            K: (centered) kernel matrix
-            Y: dependent (response) data
+            K: centered kernel matrix
+            Y: centered dependent (response) data
 
             ---Returns---
             L_kpca: KPCA loss
@@ -710,7 +714,10 @@ class SparseKPCovR(object):
         ---Methods---
         fit: fit the sparse KPCovR model
         transform_K: transform the data into KPCA space
-        transform_Y: compute predicted Y values
+        inverse_transform_K: computes the reconstructedkernel matrix
+        inverse_transform_X: computes the reconstructed original input data
+            (if provided during the fit)
+        transform_Y: computes predicted Y values
     """
 
     def __init__(self, alpha=0.0, n_kpca=None, reg=1E-15, sigma=1.0, tiny=1.0E-15):
@@ -732,12 +739,12 @@ class SparseKPCovR(object):
             Computes the KRR prediction of Y
 
             ---Arguments---
-            KMM: kernel matrix between representative points
-            KNM: kernel matrix between input data and representative points
-            Y: dependent (response) data
+            KMM: centered kernel matrix between representative points
+            KNM: centered kernel matrix between input data and representative points
+            Y: centered dependent (response) data
 
             ---Returns---
-            Yhat: KRR prediction of Y
+            Yhat: centered KRR prediction of Y
             W: regression weights
         """
 
@@ -754,9 +761,9 @@ class SparseKPCovR(object):
             Fit the sparse KPCovR model
 
             ---Arguments---
-            KNM: kernel between all points and the subsampled points
-            KMM: kernel between the subsampled points
-            Y: dependent (response) variable
+            KNM: centered kernel between all points and the subsampled points
+            KMM: centered kernel between the subsampled points
+            Y: centered dependent (response) variable
         """
 
         if len(Y.shape) == 1:
@@ -854,10 +861,10 @@ class SparseKPCovR(object):
             Transform the data into KPCA space
 
             ---Arguments---
-            KNM: kernel between all points and the representative points
+            KNM: centered kernel between all points and the representative points
 
             ---Returns---
-            T: the data transformed into the KPCA space
+            T: centered transformed data
         """
 
         if self.Pkt is None:
@@ -874,10 +881,10 @@ class SparseKPCovR(object):
             Compute the reconstruction of the kernel matrix
 
             ---Arguments---
-            KNM: kernel between all points and the representative points
+            KNM: centered kernel between all points and the representative points
 
             ---Returns---
-            Kr: reconstructed kernel matrix
+            Kr: centered reconstructed kernel matrix
         """
 
         if self.Ptk is None:
@@ -895,10 +902,10 @@ class SparseKPCovR(object):
             Compute the reconstruction of the X data
 
             ---Arguments---
-            KNM: kernel between all points and the representative points
+            KNM: centered kernel between all points and the representative points
 
             ---Returns---
-            Xr: reconstructed kernel matrix
+            Xr: centered reconstructed X data
         """
 
         if self.Ptx is None:
@@ -916,10 +923,10 @@ class SparseKPCovR(object):
             Compute the predictions of Y
 
             ---Arguments---
-            KNM: kernel between all points and the representative points
+            KNM: centered kernel between all points and the representative points
 
             ---Returns---
-            Yp: predicted Y values
+            Yp: centered predicted Y values
         """
 
         if self.Pty is None:
@@ -937,8 +944,8 @@ class SparseKPCovR(object):
             Compute the sparse KPCA and sparse KRR loss functions
 
             ---Arguments---
-            KNM: kernel between the samples and representative points
-            Y: dependent (response) data
+            KNM: centered kernel between the samples and representative points
+            Y: centered dependent (response) data
 
             ---Returns---
             L_skpca: sparse KPCA loss

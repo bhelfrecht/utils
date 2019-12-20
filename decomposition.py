@@ -59,7 +59,7 @@ class PCA(object):
             X: centered data to transform based on the PCA
             
             ---Returns---
-            T: transformed PCA scores
+            T: centered transformed PCA scores
         """
 
         if self.V is None:
@@ -79,7 +79,7 @@ class PCA(object):
             X: centered data to be reconstructed
 
             ---Returns---
-            Xr: reconstructed X data
+            Xr: centered reconstructed X data
         """
 
         if self.V is None:
@@ -160,14 +160,14 @@ class KPCA(object):
             Computes the reconstruction of X
 
             ---Arguments---
-            KTT: kernel between the KPCA transformed training data
-            KXT: kernel between the transformed data and the 
+            KTT: centered kernel between the KPCA transformed training data
+            KXT: centered kernel between the transformed data and the 
                 transformed training data
-            X: the original input data
+            X: the centered original input data
             reg: regularization for the KRR scheme to find the pre-image
 
             ---Returns---
-            Xr: reconstructed input data
+            Xr: centered reconstructed input data
 
             ---References---
             1.  J. Weston, O. Chapelle, V. Vapnik, A. Elisseeff, B. Scholkopf,
@@ -277,7 +277,7 @@ class SparseKPCA(object):
                 points and the representatitve points
 
             ---Returns---
-            T: transformed KPCA scores
+            T: centered transformed KPCA scores
         """
 
         if self.V is None:
@@ -292,18 +292,18 @@ class SparseKPCA(object):
             Computes the reconstruction of X
 
             ---Arguments---
-            KTM: kernel between the KPCA transformed training data
+            KTM: centered kernel between the KPCA transformed training data
                 and the transformed representative points
-            KMM: kernel between the transformed representative points
-            KXM: kernel between the transformed data and the 
+            KMM: centered kernel between the transformed representative points
+            KXM: centered kernel between the transformed data and the 
                 representative transformed data
-            X: the original input data
+            X: the centered original input data
             sigma: regulariztion parameter 
             reg: additional regularization scale based on the maximum eigenvalue
                 of sigma*KMM + KNM.T * KNM
 
             ---Returns---
-            Xr: reconstructed input data
+            Xr: reconstructed centered input data
         """
 
         # Build the KRR model and get the weights
