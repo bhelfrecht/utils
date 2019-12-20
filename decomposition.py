@@ -4,6 +4,7 @@ import os
 import sys
 import numpy as np
 from kernels import center_kernel
+from regression import KRR, SparseKRR
 
 class PCA(object):
     """
@@ -70,6 +71,27 @@ class PCA(object):
 
             return T
 
+    def inverse_transform(self, X):
+        """
+            Reconstructs the original input data
+
+            ---Arguments---
+            X: centered data to be reconstructed
+
+            ---Returns---
+            Xr: reconstructed X data
+        """
+
+        if self.V is None:
+            print("Error: must fit the PCA before transforming")
+        else:
+
+            # Compute reconstruction
+            T = self.transform(X)
+            Xr = np.matmul(T, self.V[:, 0:self.n_pca].T)
+
+            return Xr
+
 class KPCA(object):
     """
         Performs kernel principal component analysis on a dataset
@@ -132,6 +154,38 @@ class KPCA(object):
             T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.U[0:self.n_kpca])))
 
             return T
+
+    def inverse_transform(self, KTT, KXT, X, reg=1.0E-15):
+        """
+            Computes the reconstruction of X
+
+            ---Arguments---
+            KTT: kernel between the KPCA transformed training data
+            KXT: kernel between the transformed data and the 
+                transformed training data
+            X: the original input data
+            reg: regularization for the KRR scheme to find the pre-image
+
+            ---Returns---
+            Xr: reconstructed input data
+
+            ---References---
+            1.  J. Weston, O. Chapelle, V. Vapnik, A. Elisseeff, B. Scholkopf,
+                'Kernel Dependency Estimation', Advances in Neural Information
+                Processing Systems 15, 897-904, 2003.
+            2.  J. Weston, B. Scholkopf, G. Bakir, 'Learning to Find Pre-Images',
+                Advances in Neural Information Processing Systems 16, 449-456, 2004.
+        """
+
+        # Build the KRR model and get the weights
+        krr = KRR(reg=reg)
+        krr.fit(KTT, X)
+        W = krr.W
+
+        # Compute the reconstruction
+        Xr = np.matmul(KXT, W)
+
+        return Xr
 
 class SparseKPCA(object):
     """
@@ -231,3 +285,33 @@ class SparseKPCA(object):
         else:
             T = np.matmul(KNM-self.KNM_mean, self.V)
             return T[:, 0:self.n_kpca]
+
+
+    def inverse_transform(self, KTM, KMM, KXM, X, sigma=1, reg=1.0E-15):
+        """
+            Computes the reconstruction of X
+
+            ---Arguments---
+            KTM: kernel between the KPCA transformed training data
+                and the transformed representative points
+            KMM: kernel between the transformed representative points
+            KXM: kernel between the transformed data and the 
+                representative transformed data
+            X: the original input data
+            sigma: regulariztion parameter 
+            reg: additional regularization scale based on the maximum eigenvalue
+                of sigma*KMM + KNM.T * KNM
+
+            ---Returns---
+            Xr: reconstructed input data
+        """
+
+        # Build the KRR model and get the weights
+        skrr = SparseKRR(sigma=sigma, reg=reg)
+        skrr.fit(KTM, KMM, X)
+        W = skrr.W
+
+        # Compute the reconstruction
+        Xr = np.matmul(KXM, W)
+
+        return Xr

@@ -388,23 +388,40 @@ class PCovR(object):
 
     def transform_X(self, X):
         """
-            Compute the projection and reconstruction of X
+            Compute the projection of X
 
             ---Arguments---
-            X: data to project and reconstruct
+            X: data to project
 
             ---Returns---
             T: projection of X
-            Xr: reconstruction of X
         """
 
         if self.Pxt is None:
             print("Error: must fit the PCovR model before transforming")
         else:
             T = np.matmul(X, self.Pxt)
-            Xr = np.matmul(T, self.Ptx)
             
-            return T, Xr
+            return T
+
+    def inverse_transform_X(self, X):
+        """
+            Compute the reconstruction of X
+
+            ---Arguments---
+            X: data to reconstruct
+
+            ---Returns---
+            Xr: reconstruction of X
+        """
+
+        if self.Ptx is None:
+            print("Error: must fit the PCovR model before transforming")
+        else:
+            T = self.transform_X(X)
+            Xr = np.matmul(T, self.Ptx)
+
+            return Xr
 
     def transform_Y(self, X):
         """
@@ -422,8 +439,8 @@ class PCovR(object):
         else:
 
             # Compute predicted Y
-            Yp = np.matmul(X, self.Pxt)
-            Yp = np.matmul(Yp, self.Pty)
+            T = self.transform_X(X)
+            Yp = np.matmul(T, self.Pty)
 
             return Yp
 
@@ -441,7 +458,7 @@ class PCovR(object):
         """
 
         # Compute reconstructed X and predicted Y
-        _, Xr = self.transform_X(X)
+        Xr = self.inverse_transform_X(X)
         Yp = self.transform_Y(X)
 
         # Compute separate loss terms
@@ -488,6 +505,7 @@ class KPCovR(object):
         self.Pkt = None
         self.Pty = None
         self.Ptk = None
+        self.Ptx = None
         self.P_scale = None
 
     def _YW(self, K, Y):
@@ -511,13 +529,14 @@ class KPCovR(object):
 
         return Yhat, W
 
-    def fit(self, K, Y):
+    def fit(self, K, Y, X=None):
         """
             Fits the KPCovR model
 
             ---Arguments---
             K: kernel matrix
             Y: dependent (response) data
+            X: original independent (predictor) data
         """
 
         if len(Y.shape) == 1:
@@ -561,8 +580,10 @@ class KPCovR(object):
         self.Ptk = np.matmul(P, K)
         self.Ptk /= self.P_scale
 
-        # TODO: fit inverse transform: take X as argument, compute self.Ptx
-        # as self.Ptx = np.matmul(P, X) and then use for X reconstruction
+        # Compute the projection matrix Ptx
+        if X is not None:
+            self.Ptx = np.matmul(P, X)
+            self.Ptx /= self.P_scale
 
     def transform_K(self, K):
         """
@@ -579,9 +600,46 @@ class KPCovR(object):
             print("Error: must fit the PCovR model before transforming")
         else:
             T = np.matmul(K, self.Pkt)
+
+            return T
+
+    def inverse_transform_K(self, K):
+        """
+            Compute the reconstruction of the kernel
+
+            ---Arguments---
+            K: kernel matrix
+
+            ---Returns---
+            Kr: the reconstructed kernel
+        """
+
+        if self.Ptk is None:
+            print("Error: must fit the PCovR model before transforming")
+        else:
+            T = self.transform_K(K) 
             Kr = np.matmul(T, self.Ptk)
 
-            return T, Kr
+            return Kr
+
+    def inverse_transform_X(self, K):
+        """
+            Compute the reconstruction of the original X data
+
+            ---Arguments---
+            K: kernel matrix
+
+            ---Returns---
+            Xr: the reconstructed X data
+        """
+
+        if self.Ptx is None:
+            print("Error: must provide X data during the PCovR fit before transforming")
+        else:
+            T = self.transform_K(K)
+            Xr = np.matmul(T, self.Ptx)
+
+            return Xr
 
     def transform_Y(self, K):
         """
@@ -599,8 +657,8 @@ class KPCovR(object):
         else:
 
             # Compute predicted Y
-            Yp = np.matmul(K, self.Pkt)
-            Yp = np.matmul(Yp, self.Pty)
+            T = self.transform_K(K)
+            Yp = np.matmul(T, self.Pty)
 
             return Yp
 
@@ -619,7 +677,7 @@ class KPCovR(object):
         """
 
         # Compute the reconstructed kernel and predicted Y
-        _, Kr = self.transform_K(K)
+        Kr = self.inverse_transform_K(K)
         Yp = self.transform_Y(K)
 
         L_kpca = np.linalg.norm(K - Kr)**2/self.P_scale**2
@@ -667,6 +725,7 @@ class SparseKPCovR(object):
         self.Pkt = None
         self.Pty = None
         self.Ptk = None
+        self.Ptx = None
 
     def _YW(self, KNM, KMM, Y):
         """
@@ -690,7 +749,7 @@ class SparseKPCovR(object):
 
         return Yhat, W
 
-    def fit(self, KNM, KMM, Y):
+    def fit(self, KNM, KMM, Y, X=None):
         """
             Fit the sparse KPCovR model
 
@@ -783,8 +842,12 @@ class SparseKPCovR(object):
         self.Ptk = np.matmul(self.Ptk, self.V.T)
         self.Ptk /= self.P_scale
 
-        # TODO: fit inverse transform: take X as argument, compute self.Ptx
-        # as self.Ptx = np.matmul(P, X) and then use for X reconstruction
+        # Compute projection matrix Ptx
+        if X is not None:
+            self.Ptx = np.matmul(P, C_inv_sqrt)
+            self.Ptx = np.matmul(self.Ptx, phi.T)
+            self.Ptx = np.matmul(self.Ptx, X)
+            self.Ptx /= self.P_scale
 
     def transform_K(self, KNM):
         """
@@ -792,6 +855,9 @@ class SparseKPCovR(object):
 
             ---Arguments---
             KNM: kernel between all points and the representative points
+
+            ---Returns---
+            T: the data transformed into the KPCA space
         """
 
         if self.Pkt is None:
@@ -800,9 +866,50 @@ class SparseKPCovR(object):
 
             # Compute the KPCA-like projections
             T = np.matmul(KNM-self.KNM_mean, self.Pkt)
+
+            return T
+
+    def inverse_transform_K(self, KNM):
+        """
+            Compute the reconstruction of the kernel matrix
+
+            ---Arguments---
+            KNM: kernel between all points and the representative points
+
+            ---Returns---
+            Kr: reconstructed kernel matrix
+        """
+
+        if self.Ptk is None:
+            print("Error: must fit the KPCovR model before transforming")
+        else:
+
+            # Compute the KPCA-like projections
+            T = self.transform_K(KNM)
             Kr = np.matmul(T, self.Ptk) + self.KNM_mean
 
-            return T, Kr
+            return Kr
+
+    def inverse_transform_X(self, KNM):
+        """
+            Compute the reconstruction of the X data
+
+            ---Arguments---
+            KNM: kernel between all points and the representative points
+
+            ---Returns---
+            Xr: reconstructed kernel matrix
+        """
+
+        if self.Ptx is None:
+            print("Error: must provide X data during the KPCovR fit before transforming")
+        else:
+
+            # Compute the KPCA-like projections
+            T = self.transform_K(KNM)
+            Xr = np.matmul(T, self.Ptx)
+
+            return Xr
 
     def transform_Y(self, KNM):
         """
@@ -820,8 +927,8 @@ class SparseKPCovR(object):
         else:
 
             # Compute predicted Y values
-            Yp = np.matmul(KNM-self.KNM_mean, self.Pkt)
-            Yp = np.matmul(Yp, self.Pty)
+            T = self.transform_K(KNM)
+            Yp = np.matmul(T, self.Pty)
 
             return Yp
 
@@ -840,7 +947,7 @@ class SparseKPCovR(object):
         """
 
         # Compute the reconstructed kernel and predicted Y
-        _, Kr = self.transform_K(KNM)
+        Kr = self.inverse_transform_K(KNM)
         Yp = self.transform_Y(KNM)
 
         L_skpca = np.linalg.norm(KNM - Kr)**2/self.P_scale**2
