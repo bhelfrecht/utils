@@ -214,6 +214,7 @@ class PCovR(object):
         Pxt: projection matrix from input space (X) to latent space (T)
         Ptx: projection matrix from latent space (T) to input space (X)
         Pty: projection matrix from latent space (T) to properties (Y)
+        P_scale: scaling for projection matrices
 
         ---Methods---
         _YW: computes the LR predicted Y and weights
@@ -243,6 +244,7 @@ class PCovR(object):
         self.Pxt = None
         self.Ptx = None
         self.Pty = None
+        self.P_scale = None
 
     def _YW(self, X, Y):
         """
@@ -298,22 +300,22 @@ class PCovR(object):
         # Compute projection matrix Pxt
         Pxt_pca = X.T/np.linalg.norm(X)**2 
         Pxt_lr = np.matmul(W, Yhat.T)/np.linalg.norm(Y)**2
-        P_scale = np.linalg.norm(X)
+        self.P_scale = np.linalg.norm(X)
 
         self.Pxt = self.alpha*Pxt_pca + (1.0 - self.alpha)*Pxt_lr
         self.Pxt = np.matmul(self.Pxt, self.V)
         self.Pxt = np.matmul(self.Pxt, np.diagflat(1.0/np.sqrt(self.U)))
-        self.Pxt *= P_scale
+        self.Pxt *= self.P_scale
 
         P = np.matmul(np.diagflat(1.0/np.sqrt(self.U)), self.V.T)
 
         # Compute projection matrix Pty
         self.Pty = np.matmul(P, Y)
-        self.Pty /= P_scale
+        self.Pty /= self.P_scale
 
         # Compute projection matrix Ptx
         self.Ptx = np.matmul(P, X)
-        self.Ptx /= P_scale
+        self.Ptx /= self.P_scale
 
     def fit_feature_space(self, X, Y):
         """
@@ -365,12 +367,12 @@ class PCovR(object):
         self.V = self.V[:, 0:self.n_pca]
         self.U = self.U[0:self.n_pca]
 
-        P_scale = np.linalg.norm(X)
+        self.P_scale = np.linalg.norm(X)
 
         # Compute projection matrix Pxt
         self.Pxt = np.matmul(C_inv_sqrt, self.V)
         self.Pxt = np.matmul(self.Pxt, np.diagflat(np.sqrt(self.U)))
-        self.Pxt *= P_scale
+        self.Pxt *= self.P_scale
 
         P = np.matmul(np.diagflat(1.0/np.sqrt(self.U)), self.V.T)
 
@@ -378,11 +380,11 @@ class PCovR(object):
         self.Pty = np.matmul(P, C_inv_sqrt)
         self.Pty = np.matmul(self.Pty, X.T)
         self.Pty = np.matmul(self.Pty, Y)
-        self.Pty /= P_scale
+        self.Pty /= self.P_scale
 
         # Compute projection matrix Ptx
         self.Ptx = np.matmul(P, C_sqrt)
-        self.Ptx /= P_scale
+        self.Ptx /= self.P_scale
 
     def transform_X(self, X):
         """
@@ -443,7 +445,7 @@ class PCovR(object):
         Yp = self.transform_Y(X)
 
         # Compute separate loss terms
-        L_pca = np.linalg.norm(X - Xr)**2/np.linalg.norm(X)**2
+        L_pca = np.linalg.norm(X - Xr)**2/self.P_scale**2
         L_lr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
 
         return L_pca, L_lr
@@ -466,6 +468,7 @@ class KPCovR(object):
             the properties (Y)
         Ptk: projection matrix from the latent space (T) to
             the kernel matrix (K)
+        P_scale: scaling for the projection matrices
 
         ---Methods---
         _YW: computes the KRR prediction of Y and weights
@@ -485,6 +488,7 @@ class KPCovR(object):
         self.Pkt = None
         self.Pty = None
         self.Ptk = None
+        self.P_scale = None
 
     def _YW(self, K, Y):
         """
@@ -540,22 +544,22 @@ class KPCovR(object):
         # Compute projection matrix Pkt
         Pkt_kpca = np.eye(K.shape[0])/np.trace(K)
         Pkt_krr = np.matmul(W, Yhat.T)/np.linalg.norm(Y)**2
-        P_scale = np.sqrt(np.trace(K))
+        self.P_scale = np.sqrt(np.trace(K))
 
         self.Pkt = self.alpha*Pkt_kpca + (1.0 - self.alpha)*Pkt_krr
         self.Pkt = np.matmul(self.Pkt, self.V)
         self.Pkt = np.matmul(self.Pkt, np.diagflat(1.0/np.sqrt(self.U)))
-        self.Pkt *= P_scale
+        self.Pkt *= self.P_scale
 
         P = np.matmul(np.diagflat(1.0/np.sqrt(self.U)), self.V.T)
 
         # Compute projection matrix Pty
         self.Pty = np.matmul(P, Y)
-        self.Pty /= P_scale
+        self.Pty /= self.P_scale
 
         # Compute projection matrix Ptk
         self.Ptk = np.matmul(P, K)
-        self.Ptk /= P_scale
+        self.Ptk /= self.P_scale
 
         # TODO: fit inverse transform: take X as argument, compute self.Ptx
         # as self.Ptx = np.matmul(P, X) and then use for X reconstruction
@@ -600,7 +604,28 @@ class KPCovR(object):
 
             return Yp
 
-    # TODO: loss functions
+    def loss(self, K, Y):
+        """
+            Compute the KPCA and KRR loss functions
+
+            ---Arguments---
+            K: (centered) kernel matrix
+            Y: dependent (response) data
+
+            ---Returns---
+            L_kpca: KPCA loss
+            L_krr: KRR loss
+
+        """
+
+        # Compute the reconstructed kernel and predicted Y
+        _, Kr = self.transform_K(K)
+        Yp = self.transform_Y(K)
+
+        L_kpca = np.linalg.norm(K - Kr)**2/self.P_scale**2
+        L_lr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
+
+        return L_kpca, L_lr
 
 class SparseKPCovR(object):
     """
@@ -688,6 +713,8 @@ class SparseKPCovR(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
+        # Auxiliary centering of KNM
+        # since we are working with an approximate feature space
         self.KNM_mean = np.mean(KNM, axis=0)
 
         # Change from kernel-based W to phi-based W
@@ -733,14 +760,14 @@ class SparseKPCovR(object):
         Vs = Vs[:, Us > self.tiny]
         Us = Us[Us > self.tiny]
 
-        P_scale = np.sqrt(np.trace(C))
+        self.P_scale = np.sqrt(np.trace(C))
 
         # Compute projection matrix Pkt
         self.Pkt = np.matmul(self.V, np.diagflat(1.0/np.sqrt(self.U)))
         self.Pkt = np.matmul(self.Pkt, C_inv_sqrt)
         self.Pkt = np.matmul(self.Pkt, Vs)
         self.Pkt = np.matmul(self.Pkt, np.diagflat(np.sqrt(Us)))
-        self.Pkt *= P_scale
+        self.Pkt *= self.P_scale
 
         P = np.matmul(np.diagflat(1.0/np.sqrt(Us)), Vs.T)
 
@@ -748,13 +775,13 @@ class SparseKPCovR(object):
         self.Pty = np.matmul(P, C_inv_sqrt)
         self.Pty = np.matmul(self.Pty, phi.T)
         self.Pty = np.matmul(self.Pty, Y)
-        self.Pty /= P_scale
+        self.Pty /= self.P_scale
 
         # Compute projection matrix Ptk
         self.Ptk = np.matmul(P, C_sqrt)
         self.Ptk = np.matmul(self.Ptk, np.diagflat(np.sqrt(self.U)))
         self.Ptk = np.matmul(self.Ptk, self.V.T)
-        self.Ptk /= P_scale
+        self.Ptk /= self.P_scale
 
         # TODO: fit inverse transform: take X as argument, compute self.Ptx
         # as self.Ptx = np.matmul(P, X) and then use for X reconstruction
@@ -773,7 +800,7 @@ class SparseKPCovR(object):
 
             # Compute the KPCA-like projections
             T = np.matmul(KNM-self.KNM_mean, self.Pkt)
-            Kr = np.matmul(T, self.Ptk)
+            Kr = np.matmul(T, self.Ptk) + self.KNM_mean
 
             return T, Kr
 
@@ -798,4 +825,26 @@ class SparseKPCovR(object):
 
             return Yp
 
-    # TODO: loss functions
+    def loss(self, KNM, Y):
+        """
+            Compute the sparse KPCA and sparse KRR loss functions
+
+            ---Arguments---
+            KNM: kernel between the samples and representative points
+            Y: dependent (response) data
+
+            ---Returns---
+            L_skpca: sparse KPCA loss
+            L_skrr: sparse KRR loss
+
+        """
+
+        # Compute the reconstructed kernel and predicted Y
+        _, Kr = self.transform_K(KNM)
+        Yp = self.transform_Y(KNM)
+
+        L_skpca = np.linalg.norm(KNM - Kr)**2/self.P_scale**2
+        L_skrr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
+
+        return L_skpca, L_skrr
+
