@@ -51,6 +51,8 @@ class PCA(object):
         self.U = np.flip(self.U, axis=0)
         self.V = np.flip(self.V, axis=1)
 
+        # TODO: when to truncate?
+
     def transform(self, X):
         """
             Transforms the PCA
@@ -133,6 +135,8 @@ class KPCA(object):
         self.V = np.flip(self.V, axis=1)
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
+
+        # TODO: when to truncate?
     
     def transform(self, K):
         """
@@ -249,8 +253,11 @@ class SparseKPCA(object):
         self.Vm = np.flip(self.Vm, axis=1)
         self.Vm = self.Vm[:, self.Um > self.tiny]
         self.Um = self.Um[self.Um > self.tiny]
+
+        # TODO: when to truncate?
             
         # Compute a KPCA based on the eigendecomposition of KMM
+        # TODO: alternatively center T by its mean and same in transform
         T = np.matmul(KNM-self.KNM_mean, self.Vm)
         T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.Um)))
 

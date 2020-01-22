@@ -295,6 +295,7 @@ class PCovR(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
+        # TODO: when to truncate?
         self.V = self.V[:, 0:self.n_pca]
         self.U = self.U[0:self.n_pca]
 
@@ -561,6 +562,7 @@ class KPCovR(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
+        # TODO: when to truncate?
         self.V = self.V[:, 0:self.n_kpca]
         self.U = self.U[0:self.n_kpca]
 
@@ -787,9 +789,10 @@ class SparseKPCovR(object):
         W = np.matmul(self.V.T, W)
         W = np.matmul(np.diagflat(np.sqrt(self.U)), W)
 
-        # TODO: don't truncate yet?
+        # TODO: when to truncate?
         self.V = self.V[:, 0:self.n_kpca]
         self.U = self.U[0:self.n_kpca]
+        W = W[0:self.n_kpca]
 
         # Compute the feature space data
         phi = np.matmul(KNM-self.KNM_mean, self.V)
