@@ -816,7 +816,6 @@ class SparseKPCovR(object):
 
         # Compute the S matrix
         S_kpca = C/np.trace(C)
-
         S_lr = np.matmul(C_sqrt, W)
         S_lr = np.matmul(S_lr, S_lr.T)/np.linalg.norm(Y)**2
 
