@@ -4,6 +4,15 @@ import os
 import sys
 import numpy as np
 
+# TODO: CHECK IF STANDARDIZATION AFFECTS SCALING
+# IN PCOVR, KPCOVR, AND SPARSE KPCOVR
+# NOTE: SCALING OK, AGREES WITH SKLEARN
+
+# TODO: CHECK IF SCALING IS EQUIVALENT BY CHANGING
+# THE SCALE DIRECTLY IN THE S OR G MATRICES
+# INSTEAD OF IN THE PROJECTION MATRICES
+# TEST FOR BOTH NORMALIZED AND NON-NORMALIZED DATA
+
 class LR(object):
     """
         Performs linear regression
@@ -686,7 +695,8 @@ class KPCovR(object):
         Kr = self.inverse_transform_K(K)
         Yp = self.transform_Y(K)
 
-        L_kpca = np.linalg.norm(K - Kr)**2/self.P_scale**2
+        #L_kpca = np.linalg.norm(K - Kr)**2/self.P_scale**2
+        L_kpca = np.linalg.norm(K - Kr)**2/self.P_scale**4 # Tr(K)^2 in denominator for reproducing RKHS
         L_lr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
 
         return L_kpca, L_lr
@@ -711,7 +721,7 @@ class SparseKPCovR(object):
             the properties (Y)
         Ptk: projection matrix from the latent space (T) to
             the kernel matrix (K)
-        phi: independent (predictor) data in feature space
+        P_scale: scaling for projection matrices
 
         ---Methods---
         fit: fit the sparse KPCovR model
@@ -735,6 +745,7 @@ class SparseKPCovR(object):
         self.Pty = None
         self.Ptk = None
         self.Ptx = None
+        self.P_scale = None
 
     def _YW(self, KNM, KMM, Y):
         """
@@ -751,6 +762,9 @@ class SparseKPCovR(object):
         """
 
         # Compute the predicted Y with sparse KRR
+        # NOTE: If centered kernels not used, may need to 
+        # do instead LR in the centered feature space (i.e., with phi)
+        # and KPCA part is based on phi centering as well anyway
         skrr = SparseKRR(reg=self.reg, sigma=self.sigma)
         skrr.fit(KNM, KMM, Y)
         Yhat = skrr.transform(KNM)
@@ -959,6 +973,7 @@ class SparseKPCovR(object):
         Kr = self.inverse_transform_K(KNM)
         Yp = self.transform_Y(KNM)
 
+        # TODO: check sparse kpca loss based on reproducing the RKHS
         L_skpca = np.linalg.norm(KNM - Kr)**2/self.P_scale**2
         L_skrr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
 

@@ -182,6 +182,7 @@ class KPCA(object):
         """
 
         # Build the KRR model and get the weights
+        # (Can also use LR solution)
         krr = KRR(reg=reg)
         krr.fit(KTT, X)
         W = krr.W
