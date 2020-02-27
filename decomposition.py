@@ -4,7 +4,7 @@ import os
 import sys
 import numpy as np
 from kernels import center_kernel
-from regression import KRR, SparseKRR
+from regression import KRR, SparseKRR, IterativeSparseKRR
 
 class PCA(object):
     """
@@ -258,7 +258,8 @@ class SparseKPCA(object):
         # TODO: when to truncate?
             
         # Compute a KPCA based on the eigendecomposition of KMM
-        # TODO: alternatively center T by its mean and same in transform
+        # TODO: alternatively center T by its mean and same in transform 
+        # to be consistent with iterative sparse KPCA
         T = np.matmul(KNM-self.KNM_mean, self.Vm)
         T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.Um)))
 
@@ -320,6 +321,223 @@ class SparseKPCA(object):
         W = skrr.W
 
         # Compute the reconstruction
+        Xr = np.matmul(KXM, W)
+
+        return Xr
+
+class IterativeSparseKPCA(object):
+    """
+        Performs sparsified principal component analysis
+        using batches. Example usage:
+
+        KMM = build_kernel(Xm, Xm)
+        iskpca = IterativeSparseKPCA()
+        iskpca.initialize_fit(KMM)
+        for i in batches:
+            KNMi = build_kernel(Xi, Xm)
+            iskpca.fit_batch(KNMi)
+        iskpca.finalize_fit()
+        for i in batches:
+            KNMi = build_kernel(Xi, Xm)
+            iskpca.transform(KNMi)
+        
+        ---Attributes---
+        n_kpca: number of principal components to retain
+        T_mean: the column means of the approximate feature space
+        n_samples: number of training points
+        tiny: threshold for discarding small eigenvalues
+        KNM_mean: auxiliary centering of the kernel matrix
+            because the centering must be based on the
+            feature space, which is approximated
+        Um: eigenvectors of KMM
+        Vm: eigenvalues of KMM
+        Uc: eigenvalues of the covariance of T
+        Vc: eigenvectors of the covariance of T
+        V: projection matrix
+        iskrr: SparseKRR object used to construct the inverse transform
+
+        ---Methods---
+        initialize_fit: initialize the sparse KPCA fit
+            (i.e., compute eigendecomposition of KMM)
+        fit_batch: fit a batch of training data
+        finalize_fit: finalize the sparse KPCA fitting procedure
+            (i.e., compute the KPCA projection vectors)
+        transform: transform the sparse KPCA
+        
+        ---References---
+        1.  https://en.wikipedia.org/wiki/Kernel_principal_component_analysis
+        2.  M. E. Tipping 'Sparse Kernel Principal Component Analysis',
+            Advances in Neural Information Processing Systems 13, 633-639, 2001
+        3.  C. Williams, M. Seeger, 'Using the Nystrom Method to Speed Up Kernel Machines',
+            Avnaces in Neural Information Processing Systems 13, 682-688, 2001
+        4.  K. Zhang, I. W. Tsang, J. T. Kwok, 'Improved Nystrom Low-Rank Approximation
+            and Error Analysis', Proceedings of the 25th International Conference
+            on Machine Learning, 1232-1239, 2008
+    """
+    
+    def __init__(self, n_kpca=None, tiny=1.0E-15):
+        self.n_kpca = n_kpca
+        self.tiny = tiny
+        self.C = None
+        self.T_mean = None
+        self.n_samples = None
+        self.Um = None
+        self.Vm = None
+        self.Uc = None
+        self.Vc = None
+        self.V = None
+        self.iskrr = None
+
+    def initialize_fit(self, KMM):
+        """
+            Computes the eigendecomposition of the
+            kernel matrix between the representative points
+
+            ---Arguments---
+            KMM: centered kernel between the representative points
+        """
+
+        # Compute eigendecomposition on KMM
+        self.Um, self.Vm = np.linalg.eigh(KMM)
+        self.Um = np.flip(self.Um, axis=0)
+        self.Vm = np.flip(self.Vm, axis=1)
+        self.Vm = self.Vm[:, self.Um > self.tiny]
+        self.Um = self.Um[self.Um > self.tiny]
+
+        # TODO: when to truncate?
+        # Set shape of T_mean and C according to the
+        # number of nonzero eigenvalues
+        self.C = np.zeros((self.Um.size, self.Um.size))
+        self.T_mean = np.zeros(self.Um.size)
+        self.n_samples = 0
+        
+    def fit_batch(self, KNM):
+        """
+            Fits a batch for the sparse KPCA
+
+            ---Arguments---
+            KNM: centered kernel between all training points
+                and the representative points
+            KMM: centered kernel between the representative points
+        """
+
+        if self.Um is None or self.Vm is None:
+            print("Error: must initialize the fit with a KMM"
+                    "before fitting batches")
+            return
+
+        # Reshape 1D arrays
+        if KNM.ndim < 2:
+            KNM = np.reshape(KNM, (1, -1))
+
+        # Don't need to do auxiliary centering of T or KNM
+        # since the covariance matrix will be centered once
+        # we are finished building it
+
+        # Compute a KPCA based on the eigendecomposition of KMM
+        T = np.matmul(KNM, self.Vm)
+        T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.Um)))
+
+        # Increment T_mean and number of samples
+        self.T_mean += np.sum(T, axis=0)
+        self.n_samples += KNM.shape[0]
+
+        # Compute covariance of projections, since the eigenvectors
+        # of KMM are not necessarily uncorrelated for the whole
+        # training set KNM
+        self.C += np.matmul(T.T, T)
+
+    def finalize_fit(self):
+        """
+            Finalize the sparse KPCA fitting procedure
+        """
+
+        if self.n_samples < 1:
+            print("Error: must fit at least one batch"
+                    "before finalizing the fit")
+            return
+
+        # Center the covariance matrix
+        self.C = center_kernel(self.C)
+
+        # Eigendecomposition on the covariance
+        self.Uc, self.Vc = np.linalg.eigh(self.C)
+        self.Uc = np.flip(self.Uc, axis=0)
+        self.Vc = np.flip(self.Vc, axis=1)
+
+        # Compute projection matrix
+        self.V = np.matmul(self.Vm, np.diagflat(1.0/np.sqrt(self.Um)))
+        self.V = np.matmul(self.V, self.Vc)
+
+        # Compute T_mean
+        self.T_mean /= self.n_samples
+
+    def transform(self, KNM):
+        """
+            Transforms the sparse KPCA
+
+            ---Arguments---
+            KNM: centered kernel between the training/testing
+                points and the representatitve points
+
+            ---Returns---
+            T: centered transformed KPCA scores
+        """
+
+        if self.V is None:
+            print("Error: must fit the KPCA before transforming")
+        else:
+            T = np.matmul(KNM, self.V) - self.T_mean
+            return T[:, 0:self.n_kpca]
+
+    def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1, reg=1.0E-15):
+        """
+            Initialize the sparse KPCA inverse transform
+
+            ---Arguments---
+            KMM: centered kernel between the transformed representative points
+            x_dim: dimension of X data
+            sigma: regulariztion parameter 
+            reg: additional regularization scale based on the maximum eigenvalue
+                of sigma*KMM + KNM.T * KNM
+        """
+
+        self.iskrr = IterativeSparseKRR(sigma=sigma, reg=reg)
+        self.iskrr.initialize_fit(KMM, y_dim=x_dim)
+
+    def fit_inverse_transform_batch(self, KTM, X):
+        """
+            Fit a batch for the inverse KPCA transform
+
+            ---Arguments---
+            KTM: centered kernel between the KPCA transformed training data
+                and the transformed representative points
+            X: the centered original input data
+        """
+
+        self.iskrr.fit_batch(KTM, X)
+
+    def finalize_inverse_transform(self):
+        """
+            Finalize the fitting of the inverse KPCA transform
+        """
+
+        self.iskrr.finalize_fit()
+
+    def inverse_transform(self, KXM):
+        """
+            Computes the reconstruction of X
+
+            ---Arguments---
+            KXM: centered kernel between the transformed data and the 
+                representative transformed data
+
+            ---Returns---
+            Xr: reconstructed centered input data
+        """
+
+        # Compute the reconstruction
+        W = self.iskrr.W
         Xr = np.matmul(KXM, W)
 
         return Xr
