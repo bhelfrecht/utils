@@ -138,7 +138,6 @@ class KRR(object):
         
             return Yp
 
-
 class SparseKRR(object):
     """
         Performs sparsified kernel ridge regression
@@ -183,6 +182,7 @@ class SparseKRR(object):
         maxeig = np.amax(np.linalg.eigvalsh(K))
 
         # Use max eigenvalue as additional regularization
+        # TODO: make additional regularization independent of eigenvalue?
         K += np.eye(KMM.shape[0])*maxeig*self.reg
 
         KY = np.matmul(KNM.T, Y)
@@ -196,6 +196,141 @@ class SparseKRR(object):
 
             ---Arguments---
             K: centered kernel matrix between training and testing data
+
+            ---Returns---
+            Yp: centered predicted Y values
+
+        """
+
+        if self.W is None:
+            print("Error: must fit the KRR model before transforming")
+        else:
+            Yp = np.matmul(KNM, self.W)
+            
+            return Yp
+
+class IterativeSparseKRR(object):
+    """
+        Performs sparsified kernel ridge regression. Example usage:
+
+        KMM = build_kernel(Xm, Xm)
+        iskrr = IterativeSparseKRR()
+        iskrr.initialize_fit(KMM)
+        for i in batches:
+            KNMi = build_kernel(Xi, Xm)
+            iskrr.fit_batch(KNMi, Yi)
+        iskrr.finalize_fit()
+        for i in batches:
+            KNMi = build_kernel(Xi, Xm)
+            iskrr.transform(KNMi)
+
+        ---Attributes---
+        sigma: regularization parameter
+        reg: additional regularization scale based on the maximum eigenvalue
+            of sigma*KMM + KNM.T * KNM
+        W: regression weights
+        KMM: centered kernel between representative points
+        KY: product of the KNM kernel and the properties Y
+        
+        ---Methods---
+        initialize_fit: initialize the fit of the sparse KRR
+            (i.e., store KMM)
+        fit_batch: fit a batch of training data
+        finalize_fit: finalize the KRR fitting
+            (i.e., compute regression weights)
+        transform: compute predicted Y values
+        
+        ---References---
+        1.  M. Ceriotti, M. J. Willatt, G. Csanyi,
+            'Machine Learning of Atomic-Scale Properties
+            Based on Physical Principles', Handbook of Materials Modeling,
+            Springer, 2018
+        2.  A. J. Smola, B. Scholkopf, 'Sparse Greedy Matrix Approximation 
+            for Machine Learning', Proceedings of the 17th International
+            Conference on Machine Learning, 911-918, 2000
+    """
+    
+    def __init__(self, sigma=1, reg=1.0E-15):
+        self.sigma = sigma
+        self.reg = reg
+        self.W = None
+        self.KMM = None
+        self.KY = None
+        self.y_dim = None
+
+    def initialize_fit(self, KMM, y_dim=1):
+        """
+            Initialize the KRR fitting by computing the
+            eigendecomposition of KMM
+
+            ---Arguments---
+            KMM: centered kernel between the representative points
+            y_dim: number of properties
+        """
+
+        # Check for valid Y dimension
+        if y_dim < 1:
+            print("Y dimension must be at least 1")
+            return
+
+        # Initialize arrays
+        self.y_dim = y_dim
+        self.KMM = KMM
+        self.K = np.zeros(KMM.shape)
+        self.KY = np.zeros((KMM.shape[0], self.y_dim)) 
+        
+    def fit_batch(self, KNM, Y):
+        """
+            Fits the KRR model by computing the regression weights
+
+            ---Arguments---
+            KNM: centered kernel between the whole dataset and the representative points
+            Y: centered property values
+        """
+
+        if self.KMM is None:
+            print("Error: must initialize the fit before fitting the batch")
+            return
+
+        # Turn scalar into 2D array
+        if not isinstance(Y, np.ndarray):
+            Y = np.array([[Y]])
+
+        # Reshape 1D kernel
+        if KNM.ndim < 2:
+            KNM = np.reshape(KNM, (1, -1))
+
+        # Reshape 1D properties
+        if Y.ndim < 2:
+            Y = np.reshape(Y, (-1, self.y_dim))
+
+        # Increment K and KY
+        self.K += np.matmul(KNM.T, KNM)
+        self.KY += np.matmul(KNM.T, Y)
+    
+    def finalize_fit(self):
+        """
+            Finalize the iterative fitting of the sparse KRR model
+            by computing regression weights
+        """
+
+        # Compute max eigenvalue of regularized model
+        self.K = self.sigma*self.KMM + self.K
+        maxeig = np.amax(np.linalg.eigvalsh(self.K))
+
+        # Use max eigenvalue as additional regularization
+        # TODO: make additional regularization independent of eigenvalue?
+        self.K += np.eye(self.KMM.shape[0])*maxeig*self.reg
+
+        # Solve KRR model
+        self.W = np.linalg.solve(self.K, self.KY)
+        
+    def transform(self, KNM):
+        """
+            Computes predicted Y values
+
+            ---Arguments---
+            KNM: centered kernel matrix between training and testing data
 
             ---Returns---
             Yp: centered predicted Y values
