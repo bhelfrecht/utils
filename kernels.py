@@ -7,7 +7,8 @@ from scipy.spatial.distance import cdist
 
 def build_phi(KNM, KMM, tiny=1.0E-15):
     """
-        Build the approximate feature space based on the Nystrom Approximation
+        Build the approximate feature space based on the Nystrom Approximation.
+        The feature space must still be centered afterwards.
 
         ---Arguments---
         KNM: centered kernel matrix between the points to transform
