@@ -5,6 +5,32 @@ import sys
 import numpy as np
 from scipy.spatial.distance import cdist
 
+def build_phi(KNM, KMM, tiny=1.0E-15):
+    """
+        Build the approximate feature space based on the Nystrom Approximation
+
+        ---Arguments---
+        KNM: centered kernel matrix between the points to transform
+            and the representative points
+        KMM: centered kernel matrix between the representative points
+
+        ---Returns---
+        PhiNM: Approximate RKHS features
+    """
+
+    # Eigendecomposition of KMM
+    U, V = np.linalg.eigh(KMM)
+    U = np.flip(U, axis=0)
+    V = np.flip(V, axis=1)
+    V = V[:, U > tiny]
+    U = U[U > tiny]
+
+    # Build approximate feature space
+    PhiNM = np.matmul(KNM, V)
+    PhiNM = np.matmul(PhiNM, np.diagflat(1.0/sqrt(U)))
+
+    return PhiNM
+
 def build_kernel(XA, XB, XR=None, kernel='linear', gamma=1.0, zeta=1.0):
     """
         Build a kernel
