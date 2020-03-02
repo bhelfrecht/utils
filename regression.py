@@ -3,6 +3,7 @@
 import os
 import sys
 import numpy as np
+from tools import sorted_eigh
 
 # TODO: CHECK IF STANDARDIZATION AFFECTS SCALING
 # IN PCOVR, KPCOVR, AND SPARSE KPCOVR
@@ -433,11 +434,7 @@ class PCovR(object):
         G = self.alpha*G_pca + (1.0 - self.alpha)*G_lr
 
         # Compute eigendecomposition of G
-        self.U, self.V = np.linalg.eigh(G)
-        self.U = np.flip(self.U, axis=0)
-        self.V = np.flip(self.V, axis=1)
-        self.V = self.V[:, self.U > self.tiny]
-        self.U = self.U[self.U > self.tiny]
+        self.U, self.V = sorted_eigh(G, tiny=self.tiny)
 
         # Truncate the projections
         self.V = self.V[:, 0:self.n_pca]
@@ -482,11 +479,7 @@ class PCovR(object):
         C = np.matmul(X.T, X)
 
         # Compute eigendecomposition of the covariance
-        Uc, Vc = np.linalg.eigh(C)
-        Uc = np.flip(Uc, axis=0)
-        Vc = np.flip(Vc, axis=1)
-        Vc = Vc[:, Uc > self.tiny]
-        Uc = Uc[Uc > self.tiny]
+        Uc, Vc = sorted_eigh(C, tiny=self.tiny)
 
         # Compute inverse square root of the covariance
         C_inv_sqrt = np.matmul(Vc, np.diagflat(1.0/np.sqrt(Uc)))
@@ -504,11 +497,7 @@ class PCovR(object):
         S = self.alpha*S_pca + (1.0-self.alpha)*S_lr
 
         # Compute the eigendecomposition of the S matrix
-        self.U, self.V = np.linalg.eigh(S)
-        self.U = np.flip(self.U, axis=0)
-        self.V = np.flip(self.V, axis=1)
-        self.V = self.V[:, self.U > self.tiny]
-        self.U = self.U[self.U > self.tiny]
+        self.U, self.V = sorted_eigh(S, tiny=self.tiny)
 
         # Truncate the projections
         self.V = self.V[:, 0:self.n_pca]
@@ -701,11 +690,7 @@ class KPCovR(object):
         G = self.alpha*G_kpca + (1.0 - self.alpha)*G_krr
 
         # Compute eigendecomposition of G
-        self.U, self.V = np.linalg.eigh(G)
-        self.U = np.flip(self.U, axis=0)
-        self.V = np.flip(self.V, axis=1)
-        self.V = self.V[:, self.U > self.tiny]
-        self.U = self.U[self.U > self.tiny]
+        self.U, self.V = sorted_eigh(G, tiny=self.tiny)
 
         # Truncate the projections
         self.V = self.V[:, 0:self.n_kpca]
@@ -925,11 +910,7 @@ class SparseKPCovR(object):
         Yhat, W = self._YW(KNM, KMM, Y)
 
         # Compute eigendecomposition of KMM
-        self.U, self.V = np.linalg.eigh(KMM)
-        self.U = np.flip(self.U, axis=0)
-        self.V = np.flip(self.V, axis=1)
-        self.V = self.V[:, self.U > self.tiny]
-        self.U = self.U[self.U > self.tiny]
+        self.U, self.V = sorted_eigh(KMM, tiny=self.tiny)
 
         # Change from kernel-based W to phi-based W
         W = np.matmul(self.V.T, W)
@@ -946,11 +927,7 @@ class SparseKPCovR(object):
 
         # Compute covariance of the feature space data
         C = np.matmul(phi.T, phi)
-        Uc, Vc = np.linalg.eigh(C)
-        Uc = np.flip(Uc, axis=0)
-        Vc = np.flip(Vc, axis=1)
-        Vc = Vc[:, Uc > self.tiny]
-        Uc = Uc[Uc > self.tiny]
+        Uc, Vc = sorted_eigh(C, tiny=self.tiny)
 
         # Compute inverse square root of the covariance
         C_inv_sqrt = np.matmul(Vc, np.diagflat(1.0/np.sqrt(Uc)))
@@ -968,11 +945,7 @@ class SparseKPCovR(object):
         S = self.alpha*S_kpca + (1.0 - self.alpha)*S_lr
 
         # Compute eigendecomposition of S
-        Us, Vs = np.linalg.eigh(S)
-        Us = np.flip(Us, axis=0)
-        Vs = np.flip(Vs, axis=1)
-        Vs = Vs[:, Us > self.tiny]
-        Us = Us[Us > self.tiny]
+        Us, Vs = sorted_eigh(S, tiny=self.tiny)
 
         # Truncate the projections
         Us = Us[0:self.n_kpca]

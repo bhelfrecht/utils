@@ -5,6 +5,7 @@ import sys
 import numpy as np
 from kernels import center_kernel
 from regression import KRR, SparseKRR, IterativeSparseKRR
+from tools import sorted_eigh
 
 # TODO: CHECK IF STANDARDIZATION AFFECTS SCALING
 # IN PCOVR, KPCOVR, AND SPARSE KPCOVR
@@ -30,10 +31,11 @@ class PCA(object):
             Advances in Neural Information Processing Systems 13, 633-639, 2001
     """
 
-    def __init__(self, n_pca=None):
+    def __init__(self, n_pca=None, tiny=1.0E-15):
 
         # Initialize attributes
         self.n_pca = n_pca
+        self.tiny = tiny 
         self.C = None
         self.U = None
         self.V = None
@@ -50,9 +52,7 @@ class PCA(object):
         self.C = np.matmul(X.T, X)/(X.shape[0] - 1)
 
         # Compute eigendecomposition of covariance matrix
-        self.U, self.V = np.linalg.eigh(self.C)
-        self.U = np.flip(self.U, axis=0)
-        self.V = np.flip(self.V, axis=1)
+        self.U, self.V = sorted_eigh(self.C, tiny=self.tiny)
 
         # Truncate the projections
         self.U = self.U[0:self.n_pca]
@@ -135,11 +135,7 @@ class KPCA(object):
         """
         
         # Compute eigendecomposition of kernel
-        self.U, self.V = np.linalg.eigh(K)
-        self.U = np.flip(self.U, axis=0)
-        self.V = np.flip(self.V, axis=1)
-        self.V = self.V[:, self.U > self.tiny]
-        self.U = self.U[self.U > self.tiny]
+        self.U, self.V = sorted_eigh(K, tiny=self.tiny)
 
         # Truncate the projections
         self.U = self.U[0:self.n_kpca]
@@ -252,11 +248,7 @@ class SparseKPCA(object):
         """
 
         # Compute eigendecomposition on KMM
-        self.Um, self.Vm = np.linalg.eigh(KMM)
-        self.Um = np.flip(self.Um, axis=0)
-        self.Vm = np.flip(self.Vm, axis=1)
-        self.Vm = self.Vm[:, self.Um > self.tiny]
-        self.Um = self.Um[self.Um > self.tiny]
+        self.Um, self.Vm = sorted_eigh(KMM, tiny=self.tiny)
 
         # Compute a KPCA based on the eigendecomposition of KMM
         T = np.matmul(KNM, self.Vm)
@@ -273,9 +265,7 @@ class SparseKPCA(object):
         C = np.matmul(T.T, T)
 
         # Eigendecomposition on the covariance
-        self.Uc, self.Vc = np.linalg.eigh(C)
-        self.Uc = np.flip(self.Uc, axis=0)
-        self.Vc = np.flip(self.Vc, axis=1)
+        self.Uc, self.Vc = sorted_eigh(C, tiny=None)
 
         self.T_mean = np.matmul(self.T_mean, self.Vc)
 
@@ -409,11 +399,7 @@ class IterativeSparseKPCA(object):
         """
 
         # Compute eigendecomposition on KMM
-        self.Um, self.Vm = np.linalg.eigh(KMM)
-        self.Um = np.flip(self.Um, axis=0)
-        self.Vm = np.flip(self.Vm, axis=1)
-        self.Vm = self.Vm[:, self.Um > self.tiny]
-        self.Um = self.Um[self.Um > self.tiny]
+        self.Um, self.Vm = sorted_eigh(KMM, tiny=self.tiny)
 
         # Set shape of T_mean and C according to the
         # number of nonzero eigenvalues
@@ -469,9 +455,7 @@ class IterativeSparseKPCA(object):
             return
 
         # Eigendecomposition on the covariance
-        self.Uc, self.Vc = np.linalg.eigh(self.C)
-        self.Uc = np.flip(self.Uc, axis=0)
-        self.Vc = np.flip(self.Vc, axis=1)
+        self.Uc, self.Vc = sorted_eigh(self.C, tiny=None)
 
         # Compute T_mean
         self.T_mean = np.matmul(self.T_mean, self.Vc)
