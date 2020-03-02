@@ -9,8 +9,6 @@ from regression import KRR, SparseKRR, IterativeSparseKRR
 # TODO: CHECK IF STANDARDIZATION AFFECTS SCALING
 # IN PCOVR, KPCOVR, AND SPARSE KPCOVR
 
-# TODO: WHEN TO TRUNCATE THE PCA-BASED METHODS?
-
 class PCA(object):
     """
         Performs principal component analysis
@@ -56,7 +54,9 @@ class PCA(object):
         self.U = np.flip(self.U, axis=0)
         self.V = np.flip(self.V, axis=1)
 
-        # TODO: truncate here
+        # Truncate the projections
+        self.U = self.U[0:self.n_pca]
+        self.V = self.V[:, 0:self.n_pca]
 
     def transform(self, X):
         """
@@ -74,7 +74,7 @@ class PCA(object):
         else:
 
             # Compute PCA scores
-            T = np.matmul(X, self.V[:, 0:self.n_pca])
+            T = np.matmul(X, self.V)
 
             return T
 
@@ -95,7 +95,7 @@ class PCA(object):
 
             # Compute reconstruction
             T = self.transform(X)
-            Xr = np.matmul(T, self.V[:, 0:self.n_pca].T)
+            Xr = np.matmul(T, self.V.T)
 
             return Xr
 
@@ -141,7 +141,9 @@ class KPCA(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
-        # TODO: truncate here
+        # Truncate the projections
+        self.U = self.U[0:self.n_kpca]
+        self.V = self.V[:, 0:self.n_kpca]
     
     def transform(self, K):
         """
@@ -159,8 +161,8 @@ class KPCA(object):
         else:
             
             # Compute KPCA transformation
-            T = np.matmul(K, self.V[:, 0:self.n_kpca])
-            T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.U[0:self.n_kpca])))
+            T = np.matmul(K, self.V)
+            T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.U)))
 
             return T
 
@@ -281,7 +283,10 @@ class SparseKPCA(object):
         self.V = np.matmul(self.Vm, np.diagflat(1.0/np.sqrt(self.Um)))
         self.V = np.matmul(self.V, self.Vc)
 
-        # TODO: truncate here
+        # Truncate the projections
+        # TODO: how to compute and truncate the eigenvalues?
+        self.V = self.V[:, 0:self.n_kpca]
+        self.T_mean = self.T_mean[0:self.n_kpca]
 
     def transform(self, KNM):
         """
@@ -299,7 +304,7 @@ class SparseKPCA(object):
             print("Error: must fit the KPCA before transforming")
         else:
             T = np.matmul(KNM, self.V) - self.T_mean
-            return T[:, 0:self.n_kpca]
+            return T
 
 
     def inverse_transform(self, KTM, KMM, KXM, X, sigma=1, reg=1.0E-15):
@@ -468,14 +473,17 @@ class IterativeSparseKPCA(object):
         self.Uc = np.flip(self.Uc, axis=0)
         self.Vc = np.flip(self.Vc, axis=1)
 
+        # Compute T_mean
+        self.T_mean = np.matmul(self.T_mean, self.Vc)
+
         # Compute projection matrix
         self.V = np.matmul(self.Vm, np.diagflat(1.0/np.sqrt(self.Um)))
         self.V = np.matmul(self.V, self.Vc)
 
-        # TODO: truncate here
-
-        # Compute T_mean
-        self.T_mean = np.matmul(self.T_mean, self.Vc)
+        # Truncate the projections
+        # TODO: how to compute and truncate the eigenvalues?
+        self.V = self.V[:, 0:self.n_kpca]
+        self.T_mean = self.T_mean[0:self.n_kpca]
 
     def transform(self, KNM):
         """
@@ -493,7 +501,7 @@ class IterativeSparseKPCA(object):
             print("Error: must fit the KPCA before transforming")
         else:
             T = np.matmul(KNM, self.V) - self.T_mean
-            return T[:, 0:self.n_kpca]
+            return T
 
     def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1, reg=1.0E-15):
         """

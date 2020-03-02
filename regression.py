@@ -13,8 +13,6 @@ import numpy as np
 # INSTEAD OF IN THE PROJECTION MATRICES
 # TEST FOR BOTH NORMALIZED AND NON-NORMALIZED DATA
 
-# TODO: WHEN TO TRUNCATE THE PCA-BASED METHODS?
-
 class LR(object):
     """
         Performs linear regression
@@ -441,7 +439,7 @@ class PCovR(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
-        # TODO: truncate here, but keep copy of full
+        # Truncate the projections
         self.V = self.V[:, 0:self.n_pca]
         self.U = self.U[0:self.n_pca]
 
@@ -512,7 +510,7 @@ class PCovR(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
-        # TODO: truncate here, but keep copy of full
+        # Truncate the projections
         self.V = self.V[:, 0:self.n_pca]
         self.U = self.U[0:self.n_pca]
 
@@ -709,7 +707,7 @@ class KPCovR(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
-        # TODO: truncate here, but keep copy of full
+        # Truncate the projections
         self.V = self.V[:, 0:self.n_kpca]
         self.U = self.U[0:self.n_kpca]
 
@@ -976,7 +974,9 @@ class SparseKPCovR(object):
         Vs = Vs[:, Us > self.tiny]
         Us = Us[Us > self.tiny]
 
-        # TODO: truncate here but keep copy of full
+        # Truncate the projections
+        Us = Us[0:self.n_kpca]
+        Vs = Vs[:, 0:self.n_kpca]
 
         # Define some matrices that will be re-used
         self.P_scale = np.sqrt(np.trace(C))
@@ -1030,7 +1030,7 @@ class SparseKPCovR(object):
             # Compute the KPCA-like projections
             T = np.matmul(KNM, self.Pkt) - self.T_mean
 
-            return T[:, 0:self.n_kpca]
+            return T
 
     def inverse_transform_K(self, KNM):
         """
@@ -1049,7 +1049,7 @@ class SparseKPCovR(object):
 
             # Compute the KPCA-like projections
             T = self.transform_K(KNM)
-            Kr = np.matmul(T + self.T_mean[0:self.n_kpca], self.Ptk[0:self.n_kpca, :])
+            Kr = np.matmul(T + self.T_mean, self.Ptk)
 
             return Kr
 
@@ -1070,7 +1070,7 @@ class SparseKPCovR(object):
 
             # Compute the KPCA-like projections
             T = self.transform_K(KNM)
-            Xr = np.matmul(T, self.Ptx[0:self.n_kpca, :])
+            Xr = np.matmul(T, self.Ptx)
 
             return Xr
 
