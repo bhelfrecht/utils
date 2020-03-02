@@ -9,6 +9,8 @@ from regression import KRR, SparseKRR, IterativeSparseKRR
 # TODO: CHECK IF STANDARDIZATION AFFECTS SCALING
 # IN PCOVR, KPCOVR, AND SPARSE KPCOVR
 
+# TODO: WHEN TO TRUNCATE THE PCA-BASED METHODS?
+
 class PCA(object):
     """
         Performs principal component analysis
@@ -54,7 +56,7 @@ class PCA(object):
         self.U = np.flip(self.U, axis=0)
         self.V = np.flip(self.V, axis=1)
 
-        # TODO: when to truncate?
+        # TODO: truncate here
 
     def transform(self, X):
         """
@@ -139,7 +141,7 @@ class KPCA(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
-        # TODO: when to truncate?
+        # TODO: truncate here
     
     def transform(self, K):
         """
@@ -203,7 +205,7 @@ class SparseKPCA(object):
         n_kpca: number of principal components to retain
         T_mean: the column means of the approximate feature space
         tiny: threshold for discarding small eigenvalues
-        KNM_mean: auxiliary centering of the kernel matrix
+        T_mean: auxiliary centering of the kernel matrix
             because the centering must be based on the
             feature space, which is approximated
         Um: eigenvectors of KMM
@@ -230,7 +232,7 @@ class SparseKPCA(object):
     def __init__(self, n_kpca=None, tiny=1.0E-15):
         self.n_kpca = n_kpca
         self.tiny = tiny
-        self.KNM_mean = None
+        self.T_mean = None
         self.Um = None
         self.Vm = None
         self.Uc = None
@@ -247,10 +249,6 @@ class SparseKPCA(object):
             KMM: centered kernel between the representative points
         """
 
-        # Auxiliary centering of KNM
-        # since we are working with an approximate feature space
-        self.KNM_mean = np.mean(KNM, axis=0)
-
         # Compute eigendecomposition on KMM
         self.Um, self.Vm = np.linalg.eigh(KMM)
         self.Um = np.flip(self.Um, axis=0)
@@ -258,14 +256,14 @@ class SparseKPCA(object):
         self.Vm = self.Vm[:, self.Um > self.tiny]
         self.Um = self.Um[self.Um > self.tiny]
 
-        # TODO: when to truncate?
-            
         # Compute a KPCA based on the eigendecomposition of KMM
-        # TODO: alternatively center T by its mean and same in transform 
-        # to be consistent with iterative sparse KPCA
-        # TODO: use build_phi function?
-        T = np.matmul(KNM-self.KNM_mean, self.Vm)
+        T = np.matmul(KNM, self.Vm)
         T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.Um)))
+
+        # Auxiliary centering of T
+        # since we are working with an approximate feature space
+        self.T_mean = np.mean(T, axis=0)
+        T -= self.T_mean
 
         # Compute covariance of projections, since the eigenvectors
         # of KMM are not necessarily uncorrelated for the whole
@@ -277,9 +275,13 @@ class SparseKPCA(object):
         self.Uc = np.flip(self.Uc, axis=0)
         self.Vc = np.flip(self.Vc, axis=1)
 
+        self.T_mean = np.matmul(self.T_mean, self.Vc)
+
         # Compute projection matrix
         self.V = np.matmul(self.Vm, np.diagflat(1.0/np.sqrt(self.Um)))
         self.V = np.matmul(self.V, self.Vc)
+
+        # TODO: truncate here
 
     def transform(self, KNM):
         """
@@ -296,7 +298,7 @@ class SparseKPCA(object):
         if self.V is None:
             print("Error: must fit the KPCA before transforming")
         else:
-            T = np.matmul(KNM-self.KNM_mean, self.V)
+            T = np.matmul(KNM, self.V) - self.T_mean
             return T[:, 0:self.n_kpca]
 
 
@@ -350,7 +352,7 @@ class IterativeSparseKPCA(object):
         T_mean: the column means of the approximate feature space
         n_samples: number of training points
         tiny: threshold for discarding small eigenvalues
-        KNM_mean: auxiliary centering of the kernel matrix
+        T_mean: auxiliary centering of the kernel matrix
             because the centering must be based on the
             feature space, which is approximated
         Um: eigenvectors of KMM
@@ -408,7 +410,6 @@ class IterativeSparseKPCA(object):
         self.Vm = self.Vm[:, self.Um > self.tiny]
         self.Um = self.Um[self.Um > self.tiny]
 
-        # TODO: when to truncate?
         # Set shape of T_mean and C according to the
         # number of nonzero eigenvalues
         self.C = np.zeros((self.Um.size, self.Um.size))
@@ -470,6 +471,8 @@ class IterativeSparseKPCA(object):
         # Compute projection matrix
         self.V = np.matmul(self.Vm, np.diagflat(1.0/np.sqrt(self.Um)))
         self.V = np.matmul(self.V, self.Vc)
+
+        # TODO: truncate here
 
         # Compute T_mean
         self.T_mean = np.matmul(self.T_mean, self.Vc)

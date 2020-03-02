@@ -13,6 +13,8 @@ import numpy as np
 # INSTEAD OF IN THE PROJECTION MATRICES
 # TEST FOR BOTH NORMALIZED AND NON-NORMALIZED DATA
 
+# TODO: WHEN TO TRUNCATE THE PCA-BASED METHODS?
+
 class LR(object):
     """
         Performs linear regression
@@ -439,7 +441,7 @@ class PCovR(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
-        # TODO: when to truncate?
+        # TODO: truncate here, but keep copy of full
         self.V = self.V[:, 0:self.n_pca]
         self.U = self.U[0:self.n_pca]
 
@@ -510,6 +512,7 @@ class PCovR(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
+        # TODO: truncate here, but keep copy of full
         self.V = self.V[:, 0:self.n_pca]
         self.U = self.U[0:self.n_pca]
 
@@ -706,7 +709,7 @@ class KPCovR(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
-        # TODO: when to truncate?
+        # TODO: truncate here, but keep copy of full
         self.V = self.V[:, 0:self.n_kpca]
         self.U = self.U[0:self.n_kpca]
 
@@ -845,7 +848,7 @@ class SparseKPCovR(object):
         n_kpca: number of kernel principal components to retain
         reg: regularization parameter
         tiny: threshold for discarding small eigenvalues
-        KNM_mean: auxiliary centering for the kernel matrix
+        T_mean: auxiliary centering for the kernel matrix
             because the centering must be done based on the
             feature space, which is approximated
         U: eigenvalues of KMM
@@ -873,7 +876,7 @@ class SparseKPCovR(object):
         self.reg = reg
         self.sigma = sigma
         self.tiny = tiny
-        self.KNM_mean = None
+        self.T_mean = None
         self.U = None
         self.V = None
         self.Pkt = None
@@ -930,22 +933,18 @@ class SparseKPCovR(object):
         self.V = self.V[:, self.U > self.tiny]
         self.U = self.U[self.U > self.tiny]
 
-        # Auxiliary centering of KNM
-        # since we are working with an approximate feature space
-        self.KNM_mean = np.mean(KNM, axis=0)
-
         # Change from kernel-based W to phi-based W
         W = np.matmul(self.V.T, W)
         W = np.matmul(np.diagflat(np.sqrt(self.U)), W)
 
-        # TODO: when to truncate?
-        self.V = self.V[:, 0:self.n_kpca]
-        self.U = self.U[0:self.n_kpca]
-        W = W[0:self.n_kpca]
-
         # Compute the feature space data
-        phi = np.matmul(KNM-self.KNM_mean, self.V)
+        phi = np.matmul(KNM, self.V)
         phi = np.matmul(phi, np.diagflat(1.0/np.sqrt(self.U)))
+
+        # Auxiliary centering of phi
+        # since we are working with an approximate feature space
+        phi_mean = np.mean(phi, axis=0)
+        phi -= phi_mean
 
         # Compute covariance of the feature space data
         C = np.matmul(phi.T, phi)
@@ -977,16 +976,22 @@ class SparseKPCovR(object):
         Vs = Vs[:, Us > self.tiny]
         Us = Us[Us > self.tiny]
 
+        # TODO: truncate here but keep copy of full
+
+        # Define some matrices that will be re-used
         self.P_scale = np.sqrt(np.trace(C))
+        P = np.matmul(np.diagflat(1.0/np.sqrt(Us)), Vs.T)
+        PP = np.matmul(C_inv_sqrt, Vs)
+        PP = np.matmul(PP, np.diagflat(np.sqrt(Us)))
+
+        # Compute and store mean of the projections
+        self.T_mean = np.matmul(phi_mean, PP)
+        self.T_mean *= self.P_scale 
 
         # Compute projection matrix Pkt
         self.Pkt = np.matmul(self.V, np.diagflat(1.0/np.sqrt(self.U)))
-        self.Pkt = np.matmul(self.Pkt, C_inv_sqrt)
-        self.Pkt = np.matmul(self.Pkt, Vs)
-        self.Pkt = np.matmul(self.Pkt, np.diagflat(np.sqrt(Us)))
+        self.Pkt = np.matmul(self.Pkt, PP)
         self.Pkt *= self.P_scale
-
-        P = np.matmul(np.diagflat(1.0/np.sqrt(Us)), Vs.T)
 
         # Compute projection matrix Pty
         self.Pty = np.matmul(P, C_inv_sqrt)
@@ -1023,9 +1028,9 @@ class SparseKPCovR(object):
         else:
 
             # Compute the KPCA-like projections
-            T = np.matmul(KNM-self.KNM_mean, self.Pkt)
+            T = np.matmul(KNM, self.Pkt) - self.T_mean
 
-            return T
+            return T[:, 0:self.n_kpca]
 
     def inverse_transform_K(self, KNM):
         """
@@ -1044,7 +1049,7 @@ class SparseKPCovR(object):
 
             # Compute the KPCA-like projections
             T = self.transform_K(KNM)
-            Kr = np.matmul(T, self.Ptk) + self.KNM_mean
+            Kr = np.matmul(T + self.T_mean[0:self.n_kpca], self.Ptk[0:self.n_kpca, :])
 
             return Kr
 
@@ -1065,7 +1070,7 @@ class SparseKPCovR(object):
 
             # Compute the KPCA-like projections
             T = self.transform_K(KNM)
-            Xr = np.matmul(T, self.Ptx)
+            Xr = np.matmul(T, self.Ptx[0:self.n_kpca, :])
 
             return Xr
 

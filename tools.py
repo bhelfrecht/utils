@@ -7,6 +7,9 @@ from scipy.sparse.linalg import svds
 from scipy.sparse.linalg import eigsh
 from regression import LR
 
+# TODO: add eigendecomposition function for ordering eigenvalues
+# and eigenvectors and throwing away the tiny ones
+
 def _compute_S(X, Y, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
     """
         Compute the PCovR "covariance"
