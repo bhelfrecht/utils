@@ -6,6 +6,9 @@ import numpy as np
 from kernels import center_kernel
 from regression import KRR, SparseKRR, IterativeSparseKRR
 
+# TODO: CHECK IF STANDARDIZATION AFFECTS SCALING
+# IN PCOVR, KPCOVR, AND SPARSE KPCOVR
+
 class PCA(object):
     """
         Performs principal component analysis
@@ -260,6 +263,7 @@ class SparseKPCA(object):
         # Compute a KPCA based on the eigendecomposition of KMM
         # TODO: alternatively center T by its mean and same in transform 
         # to be consistent with iterative sparse KPCA
+        # TODO: use build_phi function?
         T = np.matmul(KNM-self.KNM_mean, self.Vm)
         T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.Um)))
 
@@ -439,13 +443,14 @@ class IterativeSparseKPCA(object):
         T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.Um)))
 
         # Increment T_mean and number of samples
-        self.T_mean += np.sum(T, axis=0)
+        old_mean = self.T_mean
         self.n_samples += KNM.shape[0]
+        self.T_mean = old_mean + np.sum(T-old_mean, axis=0)/self.n_samples
 
         # Compute covariance of projections, since the eigenvectors
         # of KMM are not necessarily uncorrelated for the whole
         # training set KNM
-        self.C += np.matmul(T.T, T)
+        self.C += np.matmul((T-self.T_mean).T, T-old_mean)
 
     def finalize_fit(self):
         """
@@ -457,9 +462,6 @@ class IterativeSparseKPCA(object):
                     "before finalizing the fit")
             return
 
-        # Center the covariance matrix
-        self.C = center_kernel(self.C)
-
         # Eigendecomposition on the covariance
         self.Uc, self.Vc = np.linalg.eigh(self.C)
         self.Uc = np.flip(self.Uc, axis=0)
@@ -470,7 +472,7 @@ class IterativeSparseKPCA(object):
         self.V = np.matmul(self.V, self.Vc)
 
         # Compute T_mean
-        self.T_mean /= self.n_samples
+        self.T_mean = np.matmul(self.T_mean, self.Vc)
 
     def transform(self, KNM):
         """
