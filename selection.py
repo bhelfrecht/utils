@@ -4,9 +4,35 @@ import os
 import sys
 import numpy as np
 from regression import LR
-from tools import sorted_eigh
+from tools import sorted_eigh, sorted_svd
 
-def _compute_S(X, Y, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
+def _compute_G(X, Y, alpha=0.0, reg=1.0E-15):
+    """
+        Compute the PCovR "kernel"
+
+        ---Arguments---
+        X: centered independent (predictor) data
+        Y: centered dependent (response) data
+        alpha: PCovR alpha
+        reg: regularization parameter for linear regression
+
+        ---Returns---
+        G: PCovR kernel
+    """
+
+    # Build linear regression model
+    lr = LR(reg=reg)
+    lr.fit(X, Y)
+    Yhat = lr.transform(X)
+
+    # Compute G matrix
+    G_pca = np.matmul(X, X.T)/np.linalg.norm(X)**2
+    G_lr = np.matmul(Yhat, Yhat.T)/np.linalg.norm(Y)**2
+    G = alpha*G_pca + (1.0-alpha)*G_lr
+
+    return G
+
+def _compute_S(X, Y, alpha=0.0, reg=1.0E-15, tiny=1.0E-15):
     """
         Compute the PCovR "covariance"
 
@@ -45,7 +71,7 @@ def _compute_S(X, Y, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
 
     return S
 
-def _CUR_select(X, Y=None, n=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
+def _CUR_select(X, Y=None, n=0, k=1, alpha=0.0, mode='covariance', tiny=1.0E-15, reg=1.0E-15):
     """
         Perform CUR column index selection
 
@@ -55,6 +81,7 @@ def _CUR_select(X, Y=None, n=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
         n: number of points to select
         k: number of top singular values to consider
         alpha: PCovR alpha (PCovR)
+        mode: 'covariance' for selecting features, 'kernel' for selecting samples
         tiny: cutoff for discarding small eigenvalues in S (PCovR)
         reg: regularization for regression of Y on selected columns of X (PCovR)
 
@@ -62,9 +89,12 @@ def _CUR_select(X, Y=None, n=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
         idxs: indices of selected columns of X
     """
 
-    # If n is zero, select all columns
-    # (essentially order the columns based on the leverage score)
-    if n <= 0:
+    # If n is zero, exit and return empty slice
+    if n == 0:
+        return slice(None, None, None)
+
+    # If n < zero, return all indices ordered by leverage score
+    elif n < 0:
         n = X.shape[0]
 
     # Initialize indices
@@ -77,6 +107,11 @@ def _CUR_select(X, Y=None, n=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
     if Y is not None:
         Y_copy = Y.copy()
         lr = LR(reg=reg)
+
+        # Check for valid mode
+        if mode != 'covariance' and mode != 'kernel':
+            print("Error: unrecognized mode. Valid modes are 'covariance' and 'kernel'")
+            return
 
     # Check for symmetric X
     try:
@@ -91,19 +126,22 @@ def _CUR_select(X, Y=None, n=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
         # if we have properties
         if Y is not None:
 
-            # Compute S
-            S = _compute_S(X_copy, Y_copy, alpha=alpha, tiny=tiny, reg=reg)
+            # Compute S/G
+            if mode == 'kernel':
+                SG = _compute_G(X_copy, Y_copy, alpha=alpha, reg=reg)
+            else:
+                SG = _compute_S(X_copy, Y_copy, alpha=alpha, tiny=tiny, reg=reg)
 
             # Compute (sparse) eigendecomposition of X
-            U, V = sorted_eigh(S, k=k, tiny=tiny)
-            V = V.T
+            U, VT = sorted_eigh(SG, k=k, tiny=tiny)
+            VT = V.T
 
         # Use eigendecomposition if symmetric
         elif sym:
 
             # Compute (sparse) eigendecomposition of X
-            U, V = sorted_eigh(X_copy, k=k, tiny=tiny)
-            V = V.T
+            U, VT = sorted_eigh(X_copy, k=k, tiny=tiny)
+            VT = V.T
 
         # SVD
         else:
@@ -215,12 +253,12 @@ def CUR(X, Y=None, n_col=0, n_row=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15,
 
     # Select column indices
     idxs_c = _CUR_select(X, Y=Y, n=n_col, k=k, 
-            alpha=alpha, tiny=tiny, reg=reg)
+            alpha=alpha, mode='covariance', tiny=tiny, reg=reg)
 
     # Select row indices
     # (PCovR selection only valid on columns due to regression on Y)
-    idxs_r = _CUR_select(X.T, Y=None, n=n_row, k=k, 
-            alpha=alpha, tiny=tiny, reg=reg)
+    idxs_r = _CUR_select(X.T, Y=Y, n=n_row, k=k, 
+            alpha=alpha, mode='kernel', tiny=tiny, reg=reg)
 
     # Append indices to outputs
     outputs.append(idxs_c)
