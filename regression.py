@@ -834,8 +834,12 @@ class SparseKPCovR(object):
         T_mean: auxiliary centering for the kernel matrix
             because the centering must be done based on the
             feature space, which is approximated
-        U: eigenvalues of KMM
-        V: eigenvectors of KMM
+        Um: eigenvalues of KMM
+        Vm: eigenvectors of KMM
+        Uc: eigenvalues of Phi.T x Phi
+        Vc: eigenvectors of Phi.T x Phi
+        U: eigenvalues of S
+        V: eigenvectors of S
         Pkt: projection matrix from the kernel matrix (K) to
             the latent space (T)
         Pty: projection matrix from the latent space (T) to
@@ -860,6 +864,10 @@ class SparseKPCovR(object):
         self.sigma = sigma
         self.tiny = tiny
         self.T_mean = None
+        self.Um = None
+        self.Vm = None
+        self.Uc = None
+        self.Vc = None
         self.U = None
         self.V = None
         self.Pkt = None
@@ -910,15 +918,15 @@ class SparseKPCovR(object):
         Yhat, W = self._YW(KNM, KMM, Y)
 
         # Compute eigendecomposition of KMM
-        self.U, self.V = sorted_eigh(KMM, tiny=self.tiny)
+        self.Um, self.Vm = sorted_eigh(KMM, tiny=self.tiny)
 
         # Change from kernel-based W to phi-based W
-        W = np.matmul(self.V.T, W)
-        W = np.matmul(np.diagflat(np.sqrt(self.U)), W)
+        W = np.matmul(self.Vm.T, W)
+        W = np.matmul(np.diagflat(np.sqrt(self.Um)), W)
 
         # Compute the feature space data
-        phi = np.matmul(KNM, self.V)
-        phi = np.matmul(phi, np.diagflat(1.0/np.sqrt(self.U)))
+        phi = np.matmul(KNM, self.Vm)
+        phi = np.matmul(phi, np.diagflat(1.0/np.sqrt(self.Um)))
 
         # Auxiliary centering of phi
         # since we are working with an approximate feature space
@@ -927,15 +935,15 @@ class SparseKPCovR(object):
 
         # Compute covariance of the feature space data
         C = np.matmul(phi.T, phi)
-        Uc, Vc = sorted_eigh(C, tiny=self.tiny)
+        self.Uc, self.Vc = sorted_eigh(C, tiny=self.tiny)
 
         # Compute inverse square root of the covariance
-        C_inv_sqrt = np.matmul(Vc, np.diagflat(1.0/np.sqrt(Uc)))
-        C_inv_sqrt = np.matmul(C_inv_sqrt, Vc.T)
+        C_inv_sqrt = np.matmul(self.Vc, np.diagflat(1.0/np.sqrt(self.Uc)))
+        C_inv_sqrt = np.matmul(C_inv_sqrt, self.Vc.T)
 
         # Compute square root of the covariance
-        C_sqrt = np.matmul(Vc, np.diagflat(np.sqrt(Uc)))
-        C_sqrt = np.matmul(C_sqrt, Vc.T)
+        C_sqrt = np.matmul(self.Vc, np.diagflat(np.sqrt(self.Uc)))
+        C_sqrt = np.matmul(C_sqrt, self.Vc.T)
 
         # Compute the S matrix
         S_kpca = C/np.trace(C)
@@ -945,24 +953,24 @@ class SparseKPCovR(object):
         S = self.alpha*S_kpca + (1.0 - self.alpha)*S_lr
 
         # Compute eigendecomposition of S
-        Us, Vs = sorted_eigh(S, tiny=self.tiny)
+        self.U, self.V = sorted_eigh(S, tiny=self.tiny)
 
         # Truncate the projections
-        Us = Us[0:self.n_kpca]
-        Vs = Vs[:, 0:self.n_kpca]
+        self.U = self.U[0:self.n_kpca]
+        self.V = self.V[:, 0:self.n_kpca]
 
         # Define some matrices that will be re-used
         self.P_scale = np.sqrt(np.trace(C))
-        P = np.matmul(np.diagflat(1.0/np.sqrt(Us)), Vs.T)
-        PP = np.matmul(C_inv_sqrt, Vs)
-        PP = np.matmul(PP, np.diagflat(np.sqrt(Us)))
+        P = np.matmul(np.diagflat(1.0/np.sqrt(self.U)), self.V.T)
+        PP = np.matmul(C_inv_sqrt, self.V)
+        PP = np.matmul(PP, np.diagflat(np.sqrt(self.U)))
 
         # Compute and store mean of the projections
         self.T_mean = np.matmul(phi_mean, PP)
         self.T_mean *= self.P_scale 
 
         # Compute projection matrix Pkt
-        self.Pkt = np.matmul(self.V, np.diagflat(1.0/np.sqrt(self.U)))
+        self.Pkt = np.matmul(self.Vm, np.diagflat(1.0/np.sqrt(self.Um)))
         self.Pkt = np.matmul(self.Pkt, PP)
         self.Pkt *= self.P_scale
 
@@ -974,8 +982,8 @@ class SparseKPCovR(object):
 
         # Compute projection matrix Ptk
         self.Ptk = np.matmul(P, C_sqrt)
-        self.Ptk = np.matmul(self.Ptk, np.diagflat(np.sqrt(self.U)))
-        self.Ptk = np.matmul(self.Ptk, self.V.T)
+        self.Ptk = np.matmul(self.Ptk, np.diagflat(np.sqrt(self.Um)))
+        self.Ptk = np.matmul(self.Ptk, self.Vm.T)
         self.Ptk /= self.P_scale
 
         # Compute projection matrix Ptx
