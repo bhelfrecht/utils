@@ -374,6 +374,7 @@ class IterativeSparseKPCA(object):
         4.  K. Zhang, I. W. Tsang, J. T. Kwok, 'Improved Nystrom Low-Rank Approximation
             and Error Analysis', Proceedings of the 25th International Conference
             on Machine Learning, 1232-1239, 2008
+        5.  https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
     """
     
     def __init__(self, n_kpca=None, tiny=1.0E-15):
