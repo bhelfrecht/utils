@@ -1051,6 +1051,10 @@ class SparseKPCovR(object):
 
             # Compute the KPCA-like projections
             T = self.transform_K(KNM)
+
+            # TODO: why does adding T_mean not work?
+            # NOTE: perhaps because we need X centered in feature space,
+            # not the RKHS feature space
             Xr = np.matmul(T, self.Ptx)
 
             return Xr
@@ -1072,7 +1076,7 @@ class SparseKPCovR(object):
 
             # Compute predicted Y values
             T = self.transform_K(KNM)
-            Yp = np.matmul(T, self.Pty)
+            Yp = np.matmul(T + self.T_mean, self.Pty)
 
             return Yp
 
