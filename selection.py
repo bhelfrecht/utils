@@ -30,11 +30,7 @@ def _compute_S(X, Y, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
     C = np.matmul(X.T, X)
 
     # Compute eigendecomposition of the covariance
-    Uc, Vc = np.linalg.eigh(C)
-    Uc = np.flip(Uc, axis=0)
-    Vc = np.flip(Vc, axis=1)
-    Vc = Vc[:, Uc > tiny]
-    Uc = Uc[Uc > tiny]
+    Uc, Vc = sorted_eigh(C, tiny=tiny)
 
     # Compute square root of the covariance
     C_sqrt = np.matmul(Vc, np.diagflat(np.sqrt(Uc)))
@@ -66,16 +62,10 @@ def _CUR_select(X, Y=None, n=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
         idxs: indices of selected columns of X
     """
 
-    # Exit straight away if no points are to be selected;
-    # return slice giving whole set of columns
+    # If n is zero, select all columns
+    # (essentially order the columns based on the leverage score)
     if n <= 0:
-        return slice(None, None, None)
-
-    min_dim = np.min(X.shape)
-    if k > min_dim:
-        print("Error: k must be less than"
-                " or equal to the smallest matrix dimension")
-        return
+        n = X.shape[0]
 
     # Initialize indices
     idxs = []
@@ -104,70 +94,26 @@ def _CUR_select(X, Y=None, n=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15):
             # Compute S
             S = _compute_S(X_copy, Y_copy, alpha=alpha, tiny=tiny, reg=reg)
 
-            # Compute (sparse) eigendecomposition of S
-            if k < min_dim:
-                U, V = eigsh(S, k=k)
-
-                # Sort the largest eigenvalues,
-                # since the sparse order is not guaranteed
-                idxs_U = np.argsort(U)
-                idxs_U = np.flip(idxs_U)
-                U = U[idxs_U]
-                V = V[:, idxs_U]
-                V = V.T
-
-            # Compute full eigendecomposition of S
-            else:
-                U, V = np.linalg.eigh(S)
-                U = np.flip(U, axis=0)
-                V = np.flip(V, axis=1)
-                V = V.T
-
+            # Compute (sparse) eigendecomposition of X
+            U, V = sorted_eigh(S, k=k, tiny=tiny)
+            V = V.T
 
         # Use eigendecomposition if symmetric
         elif sym:
 
             # Compute (sparse) eigendecomposition of X
-            if k < min_dim:
-                U, V = eigsh(X_copy, k=k)
-
-                # Sort the largest eigenvalues,
-                # since the sparse order is not guaranteed
-                idxs_U = np.argsort(U)
-                idxs_U = np.flip(idxs_U)
-                U = U[idxs_U]
-                V = V[:, idxs_U]
-                V = V.T
-
-            # Compute full eigendecomposition of X
-            else:
-                U, V = np.linalg.eigh(X_copy)
-                U = np.flip(U, axis=0)
-                V = np.flip(V, axis=1)
-                V = V.T
+            U, V = sorted_eigh(X_copy, k=k, tiny=tiny)
+            V = V.T
 
         # SVD
         else:
 
             # Compute (sparse) SVD of X
-            if k < min_dim:
-                U, S, V = svds(X_copy, k=k)
-
-                # Sort the largest eigenvalues,
-                # since the sparse order is not guaranteed
-                idxs_S = np.argsort(S)
-                idxs_S = np.flip(idxs_S)
-                S = S[idxs_S]
-                U = U[:, idxs_S]
-                V = V[idxs_S, :]
-
-            # Compute full SVD of X
-            else:
-                U, S, V = np.linalg.svd(X_copy)
+            U, S, VT = sorted_svd(X_copy, k=k, tiny=tiny)
             
         # Compute leverage score with
         # right singular vectors as rows
-        pi = np.sum(V[0:k, :]**2, axis=0)
+        pi = np.sum(VT[0:k, :]**2, axis=0)
         print(pi)
         print(np.amax(pi), np.amin(pi))
 
