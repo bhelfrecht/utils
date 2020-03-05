@@ -173,59 +173,6 @@ def _CUR_select(X, Y=None, n=0, k=1, alpha=0.0, mode='covariance', tiny=1.0E-15,
     idxs = np.asarray(idxs)
     return idxs
 
-def FPS(X, n=0):
-    """
-        Does Farthest Point Selection on a set of points X
-        Adapted from a routine by Michele Ceriotti
-
-        ---Arguments---
-        X: data on which to perform the FPS
-        n: number of points to select (<= 0 for all points)
-
-        ---Returns---
-        fps_idxs: indices of the FPS points
-        d: min max distances at each iteration
-    """
-    N = X.shape[0]
-
-    # If desired number of points less than or equal to zero,
-    # select all points
-    if n <= 0:
-        n = N
-
-    # Initialize arrays to store distances and indices
-    fps_idxs = np.zeros(n, dtype=int)
-    d = np.zeros(n)
-
-    # Pick first point at random
-    idx = np.random.randint(0, N)
-    fps_idxs[0] = idx
-
-    # Compute distance from all points to the first point
-    d1 = np.linalg.norm(X-X[idx], axis=1)**2
-
-    # Loop over the remaining points...
-    for i in range(1, n):
-
-        # Get maximum distance and corresponding point
-        fps_idxs[i] = np.argmax(d1)
-        d[i-1] = np.amax(d1)
-
-        # Exit if we have exhausted the unique points
-        # (in which case we select a point we have selected before)
-        if fps_idxs[i] in fps_idxs[0:i]:
-            fps_idxs = fps_idxs[0:i]
-            d = d[0:i]
-            break
-
-        # Compute distance from all points to the selected point
-        d2 = np.linalg.norm(X-X[fps_idxs[i]], axis=1)**2
-
-        # Set distances to minimum among the last two selected points
-        d1 = np.minimum(d1, d2)
-
-    return fps_idxs, d
-
 def CUR(X, Y=None, n_col=0, n_row=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15,
         compute_U=False, compute_Q=False):
     """
@@ -285,3 +232,103 @@ def CUR(X, Y=None, n_col=0, n_row=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15,
         outputs.append(Q)
 
     return outputs
+
+def FPS(X, n=0):
+    """
+        Does Farthest Point Selection on a set of points X
+        Adapted from a routine by Michele Ceriotti
+
+        ---Arguments---
+        X: data on which to perform the FPS
+        n: number of points to select (<= 0 for all points)
+
+        ---Returns---
+        fps_idxs: indices of the FPS points
+        d: min max distances at each iteration
+    """
+    N = X.shape[0]
+
+    # If desired number of points less than or equal to zero,
+    # select all points
+    if n <= 0:
+        n = N
+
+    # Initialize arrays to store distances and indices
+    fps_idxs = np.zeros(n, dtype=int)
+    d = np.zeros(n)
+
+    # Pick first point at random
+    idx = np.random.randint(0, N)
+    fps_idxs[0] = idx
+
+    # Compute distance from all points to the first point
+    d1 = np.linalg.norm(X-X[idx], axis=1)**2
+
+    # Loop over the remaining points...
+    for i in range(1, n):
+
+        # Get maximum distance and corresponding point
+        fps_idxs[i] = np.argmax(d1)
+        d[i-1] = np.amax(d1)
+
+        # Exit if we have exhausted the unique points
+        # (in which case we select a point we have selected before)
+        if fps_idxs[i] in fps_idxs[0:i]:
+            fps_idxs = fps_idxs[0:i]
+            d = d[0:i]
+            break
+
+        # Compute distance from all points to the selected point
+        d2 = np.linalg.norm(X-X[fps_idxs[i]], axis=1)**2
+
+        # Set distances to minimum among the last two selected points
+        d1 = np.minimum(d1, d2)
+
+    return fps_idxs, d
+
+def random_selection(n_total, n=0):
+    """
+        Select a random number of samples
+
+        ---Arguments---
+        n_total: input data to sample
+        n: number of points to select
+
+        ---Returns---
+        idxs: indices for the selection
+    """
+
+    # Select random indices
+    idxs = np.arange(0, n_total)
+    np.random.shuffle(idxs)
+
+    # Retain n indices
+    idxs = idxs[0:n]
+    
+    return idxs
+
+def std_selection(X, n=0, cutoff=1.0E-3):
+    """
+        Selects at most n samples with relative 
+        standard deviation larger than the cutoff
+
+        ---Arguments---
+        X: input data to sample
+        n: number of points to select
+        cutoff: points with relative standard deviation
+            greater than cutoff are selected (at most n)
+
+        ---Returns---
+        idxs: indices for the selection
+    """
+
+    # Select sampples where the relative standard deviation
+    # is greater than the cutoff
+    idxs = np.arange(0, X.shape[0])
+    idxs = idxs[np.std(X, axis=1)/np.mean(X, axis=1) > cutoff]
+    
+    # Retain only n indices
+    if n > 0:
+        idxs = idxs[0:n]
+        
+    return idxs
