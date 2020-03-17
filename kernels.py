@@ -234,3 +234,38 @@ def center_kernel(K, K_ref=None):
                 + np.matmul(np.matmul(oneNM, K_ref), oneMM)
 
         return Kc
+
+def center_kernel_fast(K, K_ref=None):
+    """
+        Centers a kernel matrix
+        (written with assistance from Michele Ceriotti
+        and Rose Cersonsky)
+
+        ---Arguments---
+        K: the kernel to center
+        K_ref: reference (training) kernel
+
+        ---Returns---
+        Kc: the centered kernel
+
+        ---References---
+        1. https://en.wikipedia.org/wiki/Kernel_principal_component_analysis
+        2. B. Scholkopf, A. Smola, K.-R. Muller, Nonlinear Component Analysis
+            as a Kernel Eigenvalue Problem, Neural Computation 10, 1299-1319 (1998).
+
+    """
+
+    if K_ref is None:
+        K_ref = K
+
+    if K.shape[1] != K_ref.shape[0] or K_ref.shape[0] != K_ref.shape[1]:
+        print("Error: kernels must have compatible shapes " \
+                + "and the reference kernel must be square")
+    else:
+        col_mean = np.mean(K_ref, axis=0)
+        row_mean = np.reshape(np.mean(K, axis=1), (-1, 1))
+        k_mean = np.mean(K_ref)
+
+        Kc = K - row_mean - col_mean + k_mean
+
+        return Kc
