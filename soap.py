@@ -8,6 +8,10 @@ import h5py
 from rascal.representations import SphericalInvariants
 from rascal.neighbourlist.structure_manager import mask_center_atoms_by_species
 
+# TODO: multiprocessing on computing soaps and writing
+# TODO: decide one or multiple hdf5 files, take multiprocessing
+# into account
+
 def _truncate_average(soap, component_idxs=None, average=False):
     """
         Helper function to truncate and average 
@@ -33,6 +37,8 @@ def _truncate_average(soap, component_idxs=None, average=False):
 
     return soap
 
+# TODO: make Z and species_Z optional arguments, where if not given
+# they default to all species
 def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0, 
         cutoff_transition_width=0.5, atom_sigma=0.1,
         cutoff_scale=1.0, cutoff_rate=1.0, cutoff_dexp=0,
@@ -141,8 +147,11 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
         h.attrs['central_reference_all_species'] = \
                 central_reference_all_species 
         h.attrs['diagonal_radial'] = diagonal_radial
-        h.attrs['component_idxs'] = component_idxs
         h.attrs['average'] = average
+        if component_idxs is not None:
+            h.attrs['component_idxs'] = component_idxs
+        else:
+            h.attrs['component_idxs'] = 'all'
 
         # Compute SOAP vectors
         for sdx, structure in enumerate(structures):
@@ -150,7 +159,7 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
                     cutoff=descriptor.cutoff())['data']
             soap = _truncate_average(soap, component_idxs=component_idxs,
                     average=average)
-            dataset = h.create_dataset('{:d}'.format(sdx), data=soap)
+            dataset = h.create_dataset('{:d}'.format(sdx), data=soap, track_order=True)
 
         # Close output file
         h.close()
@@ -171,24 +180,25 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
 
         return soaps
 
-def librascal_soap(structures, max_radial, max_angular, 
-        interaction_cutoff, cutoff_smooth_width,
-        gaussian_sigma_constant, Z, soap_type='PowerSpectrum', 
+# TODO: make Z optional -- if not given, use all species
+def librascal_soap(structures, Z, max_radial=6, max_angular=6, 
+        interaction_cutoff=3.0, cutoff_smooth_width=0.5,
+        gaussian_sigma_constant=0.5, soap_type='PowerSpectrum', 
         cutoff_function_type='ShiftedCosine', gaussian_sigma_type='Constant',
         inversion_symmetry=True, normalize=True,
-        average=False, output=None):
+        average=False, component_idxs=None, output=None):
     """
         Compute SOAP vectors with Librascal
 
         ---Arguments---
         structures: list of ASE Atoms objects
+        Z: list of central atom species (atomic number)
+            All species are used as environment atoms
         max_radial: number of radial basis functions
         max_angular: highest angular momentum number in spherical harmonics expansion
         cutoff: radial cutoff
         cutoff_width: distance the cutoff is smoothed to zero
         gaussian_sigma_constant: atomic Gaussian widths
-        Z: list of central atom species (atomic number)
-            All species are used as environment atoms
         soap_type: type of representation
         cutoff_function_type: type of cutoff function
         gaussian_sigma_type: fixed atomic Gaussian widths ('Constant'),
@@ -196,6 +206,7 @@ def librascal_soap(structures, max_radial, max_angular,
         inversion_symmetry: enforce inversion variance
         normalize: normalize SOAP vectors
         average: average SOAP vectors over the central atoms in a structure
+        component_idxs: indices of SOAP components to retain; discard all other components
         output: output file for hdf5
 
         ---Returns---
@@ -204,9 +215,10 @@ def librascal_soap(structures, max_radial, max_angular,
     """
 
     # Center and wrap the frames
-    for structure in structures:
+    structures_copy = structures.copy()
+    for structure in structures_copy:
         structure.center()
-        structure.wrap()
+        structure.wrap(eps=1.0E-12)
 
         # Mask central atoms
         mask_center_atoms_by_species(structure, species_select=Z)
@@ -232,23 +244,26 @@ def librascal_soap(structures, max_radial, max_angular,
         # can't set as a whole dictonary at once
         h.attrs['Z'] = Z 
         h.attrs['soap_type'] = soap_type
-        h.attrs['max_radial'] = n_max
-        h.attrs['max_angular'] = l_max
+        h.attrs['max_radial'] = max_radial
+        h.attrs['max_angular'] = max_angular
         h.attrs['interaction_cutoff'] = interaction_cutoff
-        h.attrs['cutoff_transition_width'] = cutoff_transition_width
+        h.attrs['cutoff_smooth_width'] = cutoff_smooth_width
         h.attrs['cutoff_function_type'] = cutoff_function_type
         h.attrs['gaussian_sigma_constant'] = gaussian_sigma_constant
         h.attrs['gaussian_sigma_type'] = gaussian_sigma_type
-        h.attrs['component_idxs'] = component_idxs
         h.attrs['average'] = average
+        if component_idxs is not None:
+            h.attrs['component_idxs'] = component_idxs
+        else:
+            h.attrs['component_idxs'] = 'all'
 
         # Compute SOAP vectors
-        for sdx, structure in enumerate(structures):
+        for sdx, structure in enumerate(structures_copy):
             soap_rep = descriptor.transform(structure)
             soap = soap_rep.get_features(descriptor)
             soap = _truncate_average(soap, component_idxs=component_idxs,
                     average=average)
-            dataset = h.create_dataset('{:d}'.format(sdx), data=soap)
+            dataset = h.create_dataset('{:d}'.format(sdx), data=soap, track_order=True)
 
         # Close output file
         h.close()
@@ -260,7 +275,7 @@ def librascal_soap(structures, max_radial, max_angular,
         soaps = []    
 
         # Compute SOAP vectors
-        for structure in structures:
+        for structure in structures_copy:
             soap_rep = descriptor.transform(structure)
             soap = soap_rep.get_features(descriptor)
             soap = _truncate_average(soap, component_idxs=component_idxs,
