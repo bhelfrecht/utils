@@ -31,7 +31,11 @@ def load_property(filename):
     if ext == '.npy' or ext == '.npz':
         p = np.load(filename)
     else:
-        p = np.loadtxt(filename)
+
+        # Use genfromtxt to automatically determine dtype;
+        # use system default for string encoding
+        p = np.genfromtxt(filename, dtype=None, encoding=None)
+        #p = np.loadtxt(filename)
 
     return p
 
@@ -52,7 +56,7 @@ parser.add_argument('-spn', type=str, default=[], nargs='+',
 parser.add_argument('-c', type=float, default=None,
         help='Atomic environment cutoff')
 parser.add_argument('-Z', type=str, default=None, nargs='+',
-        help='Species associated with atomic properties')
+        help='Species (symbols) associated with atomic properties')
 
 # Metadata
 parser.add_argument('-n', type=str, default='name',
@@ -70,9 +74,9 @@ parser.add_argument('-dir', type=str, default=None,
 
 # File name and outputs
 parser.add_argument('-json', type=str, default=None,
-        help='Prefix of output JSON and/or XYZ file')
+        help='Name of output JSON file')
 parser.add_argument('-extxyz', type=str, default=None, 
-        help='Write output XYZ file with properties')
+        help='Name of output XYZ file with properties')
 
 # Parse commands
 args = parser.parse_args()
@@ -94,6 +98,11 @@ if args.Z is None:
     atom_idxs = np.arange(0, n_atoms_total)
 else:
     atom_idxs = np.in1d(all_species, args.Z)
+
+# Initialize "extra" for structure properties
+# since chemiscope and extxyz handle
+# arrays differently
+extra = {}
 
 # Append atomic properties
 for ap, apn in zip(args.ap, args.apn):
@@ -123,26 +132,38 @@ for sp, spn in zip(args.sp, args.spn):
     # Load raw data (all structures)
     structure_data = load_property(sp)
 
-    # Append structure properties to frame
-    for f, s in zip(frames, structure_data):
-        f.info[spn] = s
-
-# Write new extended XYZ with appended properties
-if args.extxyz is not None:
-    write(args.extxyz, frames, format='extxyz')
-
+    # Add structure properties to dictionary
+    extra[spn] = {'target': 'structure', 
+            'values': structure_data}
+    
 # Write chemiscope input
 if args.json is not None:
 
     # Metadata
     meta = dict(name=args.n, description=args.d)
+
+    # Authors
     if args.a is not None:
         meta['authors'] = args.a
+    else:
+        meta['authors'] = 'None'
+
+    # References
     if args.r is not None:
         meta['references'] = args.r
-
-    # Dummy extra data, since we have already appended to the frame
-    extra = {}
+    else:
+        meta['references'] = 'None'
 
     # Write input
     write_chemiscope_input(args.json, meta, frames, extra, cutoff=args.c)
+
+# Write new extended XYZ with appended properties
+if args.extxyz is not None:
+
+    # Append structure properties to frame
+    for key, value in extra.items():
+        for f, s in zip(frames, value['values']):
+            f.info[key] = s
+
+    write(args.extxyz, frames, format='extxyz')
+
