@@ -174,6 +174,8 @@ class KPCA(object):
                 transformed training data
             X: the centered original input data
             reg: regularization for the KRR scheme to find the pre-image
+            rcond: cutoff ratio for small singular values in the least squares
+                solution to determine the inverse transform
 
             ---Returns---
             Xr: centered reconstructed input data
@@ -311,8 +313,10 @@ class SparseKPCA(object):
                 representative transformed data
             X: the centered original input data
             sigma: regulariztion parameter 
-            reg: additional regularization scale based on the maximum eigenvalue
-                of sigma*KMM + KNM.T * KNM
+            reg: additional regularization for the Sparse KRR solution
+                for the inverse transform
+            rcond: cutoff ratio for small singular values in the least squares
+                solution to determine the inverse transform
 
             ---Returns---
             Xr: reconstructed centered input data
@@ -490,7 +494,7 @@ class IterativeSparseKPCA(object):
             T = np.matmul(KNM, self.V) - self.T_mean
             return T
 
-    def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1, reg=1.0E-12, rcond=None):
+    def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1.0, reg=1.0E-12, rcond=None):
         """
             Initialize the sparse KPCA inverse transform
 
@@ -498,8 +502,10 @@ class IterativeSparseKPCA(object):
             KMM: centered kernel between the transformed representative points
             x_dim: dimension of X data
             sigma: regulariztion parameter 
-            reg: additional regularization scale based on the maximum eigenvalue
-                of sigma*KMM + KNM.T * KNM
+            reg: additional regularization for the Sparse KRR solution
+                for the inverse transform
+            rcond: cutoff ratio for small singular values in the least squares
+                solution to determine the inverse transform
         """
 
         self.iskrr = IterativeSparseKRR(sigma=sigma, reg=reg, rcond=rcond)

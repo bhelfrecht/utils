@@ -133,8 +133,7 @@ class SparseKRR(object):
         
         ---Attributes---
         sigma: regularization parameter
-        reg: additional regularization scale based on the maximum eigenvalue
-            of sigma*KMM + KNM.T * KNM
+        reg: additional regularization
         W: regression weights
         
         ---Methods---
@@ -212,8 +211,7 @@ class IterativeSparseKRR(object):
 
         ---Attributes---
         sigma: regularization parameter
-        reg: additional regularization scale based on the maximum eigenvalue
-            of sigma*KMM + KNM.T * KNM
+        reg: additional regularization
         W: regression weights
         KMM: centered kernel between representative points
         KY: product of the KNM kernel and the properties Y
