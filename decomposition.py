@@ -10,6 +10,8 @@ from tools import sorted_eigh
 # TODO: CHECK IF STANDARDIZATION AFFECTS SCALING
 # IN PCOVR, KPCOVR, AND SPARSE KPCOVR
 
+# TODO: make regression parameters attributes of the object
+
 class PCA(object):
     """
         Performs principal component analysis
@@ -162,7 +164,7 @@ class KPCA(object):
 
             return T
 
-    def inverse_transform(self, KTT, KXT, X, reg=1.0E-12):
+    def inverse_transform(self, KTT, KXT, X, reg=1.0E-12, rcond=None):
         """
             Computes the reconstruction of X
 
@@ -186,7 +188,7 @@ class KPCA(object):
 
         # Build the KRR model and get the weights
         # (Can also use LR solution)
-        krr = KRR(reg=reg)
+        krr = KRR(reg=reg, rcond=rcond)
         krr.fit(KTT, X)
         W = krr.W
 
@@ -297,7 +299,7 @@ class SparseKPCA(object):
             return T
 
 
-    def inverse_transform(self, KTM, KMM, KXM, X, sigma=1, reg=1.0E-12):
+    def inverse_transform(self, KTM, KMM, KXM, X, sigma=1.0, reg=1.0E-12, rcond=None):
         """
             Computes the reconstruction of X
 
@@ -317,7 +319,7 @@ class SparseKPCA(object):
         """
 
         # Build the KRR model and get the weights
-        skrr = SparseKRR(sigma=sigma, reg=reg)
+        skrr = SparseKRR(sigma=sigma, reg=reg, rcond=rcond)
         skrr.fit(KTM, KMM, X)
         W = skrr.W
 
@@ -488,7 +490,7 @@ class IterativeSparseKPCA(object):
             T = np.matmul(KNM, self.V) - self.T_mean
             return T
 
-    def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1, reg=1.0E-12):
+    def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1, reg=1.0E-12, rcond=None):
         """
             Initialize the sparse KPCA inverse transform
 
@@ -500,7 +502,7 @@ class IterativeSparseKPCA(object):
                 of sigma*KMM + KNM.T * KNM
         """
 
-        self.iskrr = IterativeSparseKRR(sigma=sigma, reg=reg)
+        self.iskrr = IterativeSparseKRR(sigma=sigma, reg=reg, rcond=rcond)
         self.iskrr.initialize_fit(KMM, y_dim=x_dim)
 
     def fit_inverse_transform_batch(self, KTM, X):

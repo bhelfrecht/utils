@@ -30,9 +30,10 @@ class LR(object):
         1.  https://en.wikipedia.org/wiki/Linear_regression
     """
 
-    def __init__(self, reg=1.0E-12):
-        self.W = None
+    def __init__(self, reg=1.0E-12, rcond=None):
         self.reg = reg
+        self.rcond = rcond
+        self.W = None
 
     def fit(self, X, Y):
         """
@@ -43,16 +44,8 @@ class LR(object):
             Y: centered dependent (response) variable
         """
 
-        # Compute inverse of covariance
-        XTX = np.matmul(X.T, X)
-
-        # Add regularization
-        XTX += np.eye(X.shape[1])*self.reg
-
-        XY = np.matmul(X.T, Y)
-
         # Compute LR solution
-        self.W = np.linalg.solve(XTX, XY)
+        self.W = np.linalg.lstsq(X, Y, rcond=self.rcond)[0]
 
     def transform(self, X):
         """
@@ -93,8 +86,9 @@ class KRR(object):
             Springer, 2018
     """
     
-    def __init__(self, reg=1.0E-12):
+    def __init__(self, reg=1.0E-12, rcond=None):
         self.reg = reg
+        self.rcond = rcond
         self.W = None
         
     def fit(self, K, Y):
@@ -110,7 +104,7 @@ class KRR(object):
         KX = K + np.eye(K.shape[0])*self.reg
 
         # Solve the model
-        self.W = np.linalg.solve(KX, Y)
+        self.W = np.linalg.lstsq(KX, Y, rcond=self.rcond)[0]
         
     def transform(self, K):
         """
@@ -157,9 +151,10 @@ class SparseKRR(object):
             Conference on Machine Learning, 911-918, 2000
     """
     
-    def __init__(self, sigma=1, reg=1.0E-12):
+    def __init__(self, sigma=1.0, reg=1.0E-12, rcond=None):
         self.sigma = sigma
         self.reg = reg
+        self.rcond = rcond
         self.W = None
         
     def fit(self, KNM, KMM, Y):
@@ -179,7 +174,7 @@ class SparseKRR(object):
         KY = np.matmul(KNM.T, Y)
 
         # Solve KRR model
-        self.W = np.linalg.solve(KX, KY)
+        self.W = np.linalg.lstsq(KX, KY, rcond=self.rcond)[0]
         
     def transform(self, KNM):
         """
@@ -241,9 +236,10 @@ class IterativeSparseKRR(object):
             Conference on Machine Learning, 911-918, 2000
     """
     
-    def __init__(self, sigma=1, reg=1.0E-12):
+    def __init__(self, sigma=1, reg=1.0E-12, rcond=None):
         self.sigma = sigma
         self.reg = reg
+        self.rcond = rcond
         self.W = None
         self.KX = None
         self.KY = None
@@ -308,7 +304,7 @@ class IterativeSparseKRR(object):
         self.KX += np.eye(self.KX.shape[0])*self.reg
 
         # Solve KRR model
-        self.W = np.linalg.solve(self.KX, self.KY)
+        self.W = np.linalg.lstsq(self.KX, self.KY, rcond=self.rcond)[0]
         
     def transform(self, KNM):
         """
@@ -364,11 +360,12 @@ class PCovR(object):
 
     """
 
-    def __init__(self, alpha=0.0, n_pca=None, reg=1.0E-12, tiny=1.0E-15):
+    def __init__(self, alpha=0.0, n_pca=None, reg=1.0E-12, tiny=1.0E-15, rcond=None):
         self.alpha = alpha
         self.n_pca = n_pca
         self.reg = reg
         self.tiny = tiny
+        self.rcond = rcond
         self.U = None
         self.V = None
         self.Pxt = None
@@ -390,7 +387,7 @@ class PCovR(object):
         """
 
         # Compute predicted Y with LR
-        lr = LR(reg=self.reg)
+        lr = LR(reg=self.reg, rcond=self.rcond)
         lr.fit(X, Y)
         Yhat = lr.transform(X)
         W = lr.W
@@ -618,11 +615,12 @@ class KPCovR(object):
 
     """
 
-    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-12, tiny=1.0E-15):
+    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-12, tiny=1.0E-15, rcond=None):
         self.alpha = alpha
         self.n_kpca = n_kpca
         self.reg = reg
         self.tiny = tiny
+        self.rcond = rcond
         self.U = None
         self.V = None
         self.Pkt = None
@@ -645,7 +643,7 @@ class KPCovR(object):
         """
 
         # Compute predicted Y with KRR
-        krr = KRR(reg=self.reg)
+        krr = KRR(reg=self.reg, rcond=self.rcond)
         krr.fit(K, Y)
         Yhat = krr.transform(K)
         W = krr.W
@@ -841,12 +839,13 @@ class SparseKPCovR(object):
         transform_Y: computes predicted Y values
     """
 
-    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-12, sigma=1.0, tiny=1.0E-15):
+    def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, reg=1.0E-12, tiny=1.0E-15, rcond=None):
         self.alpha = alpha
         self.n_kpca = n_kpca
         self.reg = reg
         self.sigma = sigma
         self.tiny = tiny
+        self.rcond = rcond
         self.T_mean = None
         self.Um = None
         self.Vm = None
@@ -878,7 +877,7 @@ class SparseKPCovR(object):
         # NOTE: If centered kernels not used, may need to 
         # do instead LR in the centered feature space (i.e., with phi)
         # and KPCA part is based on phi centering as well anyway
-        skrr = SparseKRR(reg=self.reg, sigma=self.sigma)
+        skrr = SparseKRR(sigma=self.sigma, reg=self.reg, rcond=self.rcond)
         skrr.fit(KNM, KMM, Y)
         Yhat = skrr.transform(KNM)
         W = skrr.W
@@ -1128,12 +1127,13 @@ class SparseKPCovR(object):
 #        transform_Y: computes predicted Y values
 #    """
 #
-#    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-12, sigma=1.0, tiny=1.0E-15):
+#    def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, reg=1.0E-12, tiny=1.0E-15, rcond=None):
 #        self.alpha = alpha
 #        self.n_kpca = n_kpca
 #        self.reg = reg
 #        self.sigma = sigma
 #        self.tiny = tiny
+#        self.rcond = rcond
 #        self.T_mean = None
 #        self.C = None
 #        self.Um = None
@@ -1167,7 +1167,7 @@ class SparseKPCovR(object):
 #        # NOTE: If centered kernels not used, may need to 
 #        # do instead LR in the centered feature space (i.e., with phi)
 #        # and KPCA part is based on phi centering as well anyway
-#        skrr = SparseKRR(reg=self.reg, sigma=self.sigma)
+#        skrr = SparseKRR(sigma=self.sigma, reg=self.reg, rcond=self.rcond)
 #        skrr.fit(KNM, KMM, Y)
 #        Yhat = skrr.transform(KNM)
 #        W = skrr.W
@@ -1193,7 +1193,7 @@ class SparseKPCovR(object):
 #        self.n_samples = 0
 #
 #        # Initialize the iterative sparse KRR
-#        self.iskrr = IterativeSparseKRR(reg=self.reg, sigma=self.sigma)
+#        self.iskrr = IterativeSparseKRR(sigma=self.sigma, reg=self.reg, rcond=self.rcond)
 #
 #    def fit_batch(self, KNM, Y, X=None):
 #        """
