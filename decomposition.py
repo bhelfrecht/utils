@@ -162,7 +162,7 @@ class KPCA(object):
 
             return T
 
-    def inverse_transform(self, KTT, KXT, X, reg=1.0E-15):
+    def inverse_transform(self, KTT, KXT, X, reg=1.0E-12):
         """
             Computes the reconstruction of X
 
@@ -297,7 +297,7 @@ class SparseKPCA(object):
             return T
 
 
-    def inverse_transform(self, KTM, KMM, KXM, X, sigma=1, reg=1.0E-15):
+    def inverse_transform(self, KTM, KMM, KXM, X, sigma=1, reg=1.0E-12):
         """
             Computes the reconstruction of X
 
@@ -488,7 +488,7 @@ class IterativeSparseKPCA(object):
             T = np.matmul(KNM, self.V) - self.T_mean
             return T
 
-    def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1, reg=1.0E-15):
+    def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1, reg=1.0E-12):
         """
             Initialize the sparse KPCA inverse transform
 

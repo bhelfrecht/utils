@@ -30,7 +30,7 @@ class LR(object):
         1.  https://en.wikipedia.org/wiki/Linear_regression
     """
 
-    def __init__(self, reg=1.0E-15):
+    def __init__(self, reg=1.0E-12):
         self.W = None
         self.reg = reg
 
@@ -93,7 +93,7 @@ class KRR(object):
             Springer, 2018
     """
     
-    def __init__(self, reg=1.0E-15):
+    def __init__(self, reg=1.0E-12):
         self.reg = reg
         self.W = None
         
@@ -157,7 +157,7 @@ class SparseKRR(object):
             Conference on Machine Learning, 911-918, 2000
     """
     
-    def __init__(self, sigma=1, reg=1.0E-15):
+    def __init__(self, sigma=1, reg=1.0E-12):
         self.sigma = sigma
         self.reg = reg
         self.W = None
@@ -241,7 +241,7 @@ class IterativeSparseKRR(object):
             Conference on Machine Learning, 911-918, 2000
     """
     
-    def __init__(self, sigma=1, reg=1.0E-15):
+    def __init__(self, sigma=1, reg=1.0E-12):
         self.sigma = sigma
         self.reg = reg
         self.W = None
@@ -364,7 +364,7 @@ class PCovR(object):
 
     """
 
-    def __init__(self, alpha=0.0, n_pca=None, reg=1.0E-15, tiny=1.0E-15):
+    def __init__(self, alpha=0.0, n_pca=None, reg=1.0E-12, tiny=1.0E-15):
         self.alpha = alpha
         self.n_pca = n_pca
         self.reg = reg
@@ -618,7 +618,7 @@ class KPCovR(object):
 
     """
 
-    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-15, tiny=1.0E-15):
+    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-12, tiny=1.0E-15):
         self.alpha = alpha
         self.n_kpca = n_kpca
         self.reg = reg
@@ -841,7 +841,7 @@ class SparseKPCovR(object):
         transform_Y: computes predicted Y values
     """
 
-    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-15, sigma=1.0, tiny=1.0E-15):
+    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-12, sigma=1.0, tiny=1.0E-15):
         self.alpha = alpha
         self.n_kpca = n_kpca
         self.reg = reg
@@ -1128,7 +1128,7 @@ class SparseKPCovR(object):
 #        transform_Y: computes predicted Y values
 #    """
 #
-#    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-15, sigma=1.0, tiny=1.0E-15):
+#    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-12, sigma=1.0, tiny=1.0E-15):
 #        self.alpha = alpha
 #        self.n_kpca = n_kpca
 #        self.reg = reg
