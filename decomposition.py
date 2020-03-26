@@ -323,6 +323,7 @@ class SparseKPCA(object):
         """
 
         # Build the KRR model and get the weights
+        # (can also do LR here)
         skrr = SparseKRR(sigma=sigma, reg=reg, rcond=rcond)
         skrr.fit(KTM, KMM, X)
         W = skrr.W
@@ -508,6 +509,7 @@ class IterativeSparseKPCA(object):
                 solution to determine the inverse transform
         """
 
+        # (can also do LR here)
         self.iskrr = IterativeSparseKRR(sigma=sigma, reg=reg, rcond=rcond)
         self.iskrr.initialize_fit(KMM, y_dim=x_dim)
 
