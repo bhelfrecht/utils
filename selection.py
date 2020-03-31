@@ -233,7 +233,7 @@ def CUR(X, Y=None, n_col=0, n_row=0, k=1, alpha=0.0, tiny=1.0E-15, reg=1.0E-15,
 
     return outputs
 
-def FPS(X, n=0):
+def FPS(X, n=0, start=None):
     """
         Does Farthest Point Selection on a set of points X
         Adapted from a routine by Michele Ceriotti
@@ -257,12 +257,15 @@ def FPS(X, n=0):
     fps_idxs = np.zeros(n, dtype=int)
     d = np.zeros(n)
 
-    # Pick first point at random
-    idx = np.random.randint(0, N)
-    fps_idxs[0] = idx
+    # Pick first point at random if not provided
+    if start is not None:
+        fps_idxs[0] = start
+    else:
+        fps_idxs[0] = np.random.randint(0, N)
 
     # Compute distance from all points to the first point
-    d1 = np.linalg.norm(X-X[idx], axis=1)**2
+    X2 = np.sum(X**2, axis=1)
+    d1 = X2 + X2[fps_idxs[0]] - 2*np.dot(X, X[fps_idxs[0]])
 
     # Loop over the remaining points...
     for i in range(1, n):
@@ -279,7 +282,7 @@ def FPS(X, n=0):
             break
 
         # Compute distance from all points to the selected point
-        d2 = np.linalg.norm(X-X[fps_idxs[i]], axis=1)**2
+        d2 = X2 + X2[fps_idxs[i]] - 2*np.dot(X, X[fps_idxs[i]])
 
         # Set distances to minimum among the last two selected points
         d1 = np.minimum(d1, d2)
