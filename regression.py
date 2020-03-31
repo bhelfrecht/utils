@@ -407,9 +407,13 @@ class PCovR(object):
         # Compute LR approximation of Y
         Yhat, W = self._YW(X, Y)
 
+        # Set scaling and norms
+        Ynorm = np.linalg.norm(Y)
+        self.P_scale = np.linalg.norm(X)
+
         # Compute G matrix
-        G_pca = np.matmul(X, X.T)/np.linalg.norm(X)**2
-        G_lr = np.matmul(Yhat, Yhat.T)/np.linalg.norm(Y)**2
+        G_pca = np.matmul(X, X.T)/self.P_scale**2
+        G_lr = np.matmul(Yhat, Yhat.T)/Ynorm**2
         G = self.alpha*G_pca + (1.0 - self.alpha)*G_lr
 
         # Compute eigendecomposition of G
@@ -420,9 +424,8 @@ class PCovR(object):
         self.U = self.U[0:self.n_pca]
 
         # Compute projection matrix Pxt
-        Pxt_pca = X.T/np.linalg.norm(X)**2 
-        Pxt_lr = np.matmul(W, Yhat.T)/np.linalg.norm(Y)**2
-        self.P_scale = np.linalg.norm(X)
+        Pxt_pca = X.T/self.P_scale**2 
+        Pxt_lr = np.matmul(W, Yhat.T)/Ynorm**2
 
         self.Pxt = self.alpha*Pxt_pca + (1.0 - self.alpha)*Pxt_lr
         self.Pxt = np.matmul(self.Pxt, self.V)
@@ -460,6 +463,10 @@ class PCovR(object):
         # Compute eigendecomposition of the covariance
         Uc, Vc = sorted_eigh(C, tiny=self.tiny)
 
+        # Set scaling and norms
+        self.P_scale = np.linalg.norm(X)
+        Ynorm = np.linalg.norm(Y)
+
         # Compute inverse square root of the covariance
         C_inv_sqrt = np.matmul(Vc, np.diagflat(1.0/np.sqrt(Uc)))
         C_inv_sqrt = np.matmul(C_inv_sqrt, Vc.T)
@@ -469,9 +476,9 @@ class PCovR(object):
         C_sqrt = np.matmul(C_sqrt, Vc.T)
 
         # Compute the S matrix
-        S_pca = C/np.trace(C)
+        S_pca = C/self.P_scale**2
         S_lr = np.matmul(C_sqrt, W)
-        S_lr = np.matmul(S_lr, S_lr.T)/np.linalg.norm(Y)**2
+        S_lr = np.matmul(S_lr, S_lr.T)/Ynorm**2
 
         S = self.alpha*S_pca + (1.0-self.alpha)*S_lr
 
@@ -481,8 +488,6 @@ class PCovR(object):
         # Truncate the projections
         self.V = self.V[:, 0:self.n_pca]
         self.U = self.U[0:self.n_pca]
-
-        self.P_scale = np.linalg.norm(X)
 
         # Compute projection matrix Pxt
         self.Pxt = np.matmul(C_inv_sqrt, self.V)
@@ -664,9 +669,13 @@ class KPCovR(object):
         # Compute predicted Y with KRR
         Yhat, W = self._YW(K, Y)
 
+        # Set scaling and norms
+        self.P_scale = np.sqrt(np.trace(K))
+        Ynorm = np.linalg.norm(Y)
+
         # Compute G
-        G_kpca = K/np.trace(K)
-        G_krr = np.matmul(Yhat, Yhat.T)/np.linalg.norm(Y)**2
+        G_kpca = K/self.P_scale**2
+        G_krr = np.matmul(Yhat, Yhat.T)/Ynorm**2
         G = self.alpha*G_kpca + (1.0 - self.alpha)*G_krr
 
         # Compute eigendecomposition of G
@@ -677,9 +686,8 @@ class KPCovR(object):
         self.U = self.U[0:self.n_kpca]
 
         # Compute projection matrix Pkt
-        Pkt_kpca = np.eye(K.shape[0])/np.trace(K)
-        Pkt_krr = np.matmul(W, Yhat.T)/np.linalg.norm(Y)**2
-        self.P_scale = np.sqrt(np.trace(K))
+        Pkt_kpca = np.eye(K.shape[0])/self.P_scale**2
+        Pkt_krr = np.matmul(W, Yhat.T)/Ynorm**2
 
         self.Pkt = self.alpha*Pkt_kpca + (1.0 - self.alpha)*Pkt_krr
         self.Pkt = np.matmul(self.Pkt, self.V)
@@ -918,6 +926,10 @@ class SparseKPCovR(object):
         C = np.matmul(phi.T, phi)
         self.Uc, self.Vc = sorted_eigh(C, tiny=self.tiny)
 
+        # Set scaling and norms
+        Ynorm = np.linalg.norm(Y)
+        self.P_scale = np.sqrt(np.trace(C))
+
         # Compute inverse square root of the covariance
         C_inv_sqrt = np.matmul(self.Vc, np.diagflat(1.0/np.sqrt(self.Uc)))
         C_inv_sqrt = np.matmul(C_inv_sqrt, self.Vc.T)
@@ -927,9 +939,9 @@ class SparseKPCovR(object):
         C_sqrt = np.matmul(C_sqrt, self.Vc.T)
 
         # Compute the S matrix
-        S_kpca = C/np.trace(C)
+        S_kpca = C/self.P_scale**2
         S_lr = np.matmul(C_sqrt, W)
-        S_lr = np.matmul(S_lr, S_lr.T)/np.linalg.norm(Y)**2
+        S_lr = np.matmul(S_lr, S_lr.T)/Ynorm**2
 
         S = self.alpha*S_kpca + (1.0 - self.alpha)*S_lr
 
@@ -941,7 +953,6 @@ class SparseKPCovR(object):
         self.V = self.V[:, 0:self.n_kpca]
 
         # Define some matrices that will be re-used
-        self.P_scale = np.sqrt(np.trace(C))
         P = np.matmul(np.diagflat(1.0/np.sqrt(self.U)), self.V.T)
         PP = np.matmul(C_inv_sqrt, self.V)
         PP = np.matmul(PP, np.diagflat(np.sqrt(self.U)))
