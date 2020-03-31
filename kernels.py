@@ -4,6 +4,7 @@ import os
 import sys
 import numpy as np
 from scipy.spatial.distance import cdist
+from tools import sorted_eigh
 
 def build_phi(KNM, KMM, tiny=1.0E-15):
     """
@@ -20,11 +21,7 @@ def build_phi(KNM, KMM, tiny=1.0E-15):
     """
 
     # Eigendecomposition of KMM
-    U, V = np.linalg.eigh(KMM)
-    U = np.flip(U, axis=0)
-    V = np.flip(V, axis=1)
-    V = V[:, U > tiny]
-    U = U[U > tiny]
+    U, V = sorted_eigh(KMM, tiny=tiny)
 
     # Build approximate feature space
     PhiNM = np.matmul(KNM, V)
