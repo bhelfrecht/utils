@@ -3,6 +3,7 @@
 import os
 import sys
 import numpy as np
+from tqdm import tqdm
 from regression import LR
 from tools import sorted_eigh, sorted_svd
 
@@ -120,7 +121,7 @@ def _CUR_select(X, Y=None, n=0, k=1, alpha=0.0, mode='covariance', tiny=1.0E-15,
         sym = False
 
     # Loop over the column selections...
-    for i in range(0, n):
+    for i in tqdm(range(0, n)):
 
         # Compute S and use eigendecomposition
         # if we have properties
@@ -268,7 +269,7 @@ def FPS(X, n=0, start=None):
     d1 = X2 + X2[fps_idxs[0]] - 2*np.dot(X, X[fps_idxs[0]])
 
     # Loop over the remaining points...
-    for i in range(1, n):
+    for i in tqdm(range(1, n)):
 
         # Get maximum distance and corresponding point
         fps_idxs[i] = np.argmax(d1)
@@ -276,6 +277,7 @@ def FPS(X, n=0, start=None):
 
         # Exit if we have exhausted the unique points
         # (in which case we select a point we have selected before)
+        # TODO: better exit condition?
         if fps_idxs[i] in fps_idxs[0:i]:
             fps_idxs = fps_idxs[0:i]
             d = d[0:i]
