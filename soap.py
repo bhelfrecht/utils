@@ -5,6 +5,7 @@ import sys
 import numpy as np
 from quippy.descriptors import Descriptor
 import h5py
+from tqdm import tqdm
 from rascal.representations import SphericalInvariants
 from rascal.neighbourlist.structure_manager import mask_center_atoms_by_species
 
@@ -122,7 +123,7 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
     if output is not None:
 
         # Initialize HDF5
-        h = h5py.File(output, 'w')
+        h = h5py.File(output, mode='w')
 
         # Add metadata
         # Have to set attributes individually;
@@ -153,13 +154,16 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
         else:
             h.attrs['component_idxs'] = 'all'
 
+        # Number of digits for structure numbers
+        n_digits = len(str(len(structures) - 1))
+
         # Compute SOAP vectors
-        for sdx, structure in enumerate(structures):
+        for sdx, structure in enumerate(tqdm(structures)):
             soap = descriptor.calc(structure, 
                     cutoff=descriptor.cutoff())['data']
             soap = _truncate_average(soap, component_idxs=component_idxs,
                     average=average)
-            dataset = h.create_dataset('{:d}'.format(sdx), data=soap, track_order=True)
+            dataset = h.create_dataset(str(sdx).zfill(n_digits), data=soap)
 
         # Close output file
         h.close()
@@ -171,7 +175,7 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
         soaps = []    
 
         # Compute SOAP vectors
-        for structure in structures:
+        for structure in tqdm(structures):
             soap = descriptor.calc(structure, 
                     cutoff=descriptor.cutoff())['data']
             soap = _truncate_average(soap, component_idxs=component_idxs,
@@ -237,7 +241,7 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
     if output is not None:
 
         # Initialize HDF5
-        h = h5py.File(output, 'w')
+        h = h5py.File(output, mode='w')
 
         # Add metadata
         # Have to set attributes individually;
@@ -257,13 +261,16 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         else:
             h.attrs['component_idxs'] = 'all'
 
+        # Number of digits for structure numbers
+        n_digits = len(str(len(structures) - 1))
+
         # Compute SOAP vectors
-        for sdx, structure in enumerate(structures_copy):
+        for sdx, structure in enumerate(tqdm(structures_copy)):
             soap_rep = descriptor.transform(structure)
             soap = soap_rep.get_features(descriptor)
             soap = _truncate_average(soap, component_idxs=component_idxs,
                     average=average)
-            dataset = h.create_dataset('{:d}'.format(sdx), data=soap, track_order=True)
+            dataset = h.create_dataset(str(sdx).zfill(n_digits), data=soap)
 
         # Close output file
         h.close()
@@ -275,7 +282,7 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         soaps = []    
 
         # Compute SOAP vectors
-        for structure in structures_copy:
+        for structure in tqdm(structures_copy):
             soap_rep = descriptor.transform(structure)
             soap = soap_rep.get_features(descriptor)
             soap = _truncate_average(soap, component_idxs=component_idxs,
