@@ -198,6 +198,82 @@ def gaussian_kernel(XA, XB, gamma=1):
     K = np.exp(-gamma*D)
     return K
 
+def _diag_indices(shape, k=0):
+    """
+        Computes the indices of the kth diagonal
+        of a 2D matrix
+
+        ---Arguments---
+        shape: 2D tuple in the form (n_rows, n_columns)
+        k: kth diagonal (0 for the main diagonal,
+            k < 0 for below main diagonal, k > 0 for above main diagonal)
+
+        ---Returns---
+        idxs: tuple of array indices in the from (row_idxs, col_idxs)
+    """
+
+    row_start = np.abs(np.minimum(k, 0))
+    row_end = np.minimum(np.abs(k - shape[1] + 1), shape[0] - 1)
+    col_start = np.maximum(k, 0)
+    col_end = np.minimum(k + shape[0] - 1, shape[1] - 1)
+
+    row_idxs = np.arange(row_start, row_end + 1, dtype=int)
+    col_idxs = np.arange(col_start, col_end + 1, dtype=int)
+    idxs = (row_idxs, col_idxs)
+
+    return idxs
+
+def gaussian_kernel_diag(XA, XB, gamma=1, k=0):
+    """
+        Builds only the kth diagonal of a Gaussian kernel
+
+        ---Arguments---
+        XA, XB: vectors of data with which to build the
+            kernel diagonal, where each row is a sample
+            and each column a feature.
+        gamma: scaling parameter for the Gaussian
+        k: kth diagonal (0 for the main diagonal,
+            k < 0 for below main diagonal, k > 0 for above main diagonal)
+
+        ---Returns---
+        K: array of diagonal entries from top left to bottom right
+    """
+
+    if k >= XB.shape[0] or k <= -XA.shape[0]:
+        print("Error: diagonal index cannot exceed matrix shape")
+        return
+
+    XA_idxs, XB_idxs = _diag_indices((XA.shape[0], XB.shape[0]), k=k)
+    D = np.linalg.norm(XA[XA_idxs, :] - XB[XB_idxs, :], axis=1)**2
+    K = np.exp(-gamma*D)
+
+    return K
+
+def linear_kernel_diag(XA, XB, zeta=1, k=0):
+    """
+        Builds only the kth diagonal of a linear kernel
+
+        ---Arguments---
+        XA, XB: vectors of data with which to build the
+            kernel diagonal, where each row is a sample
+            and each column a feature. 
+        zeta: exponent for the linear kernel
+        k: kth diagonal (0 for the main diagonal,
+            k < 0 for below main diagonal, k > 0 for above main diagonal)
+
+        ---Returns---
+        K: array of diagonal entries from top left to bottom right
+    """
+
+    if k >= XB.shape[0] or k <= -XA.shape[0]:
+        print("Error: diagonal index cannot exceed matrix shape")
+        return
+
+    XA_idxs, XB_idxs = _diag_indices((XA.shape[0], XB.shape[0]), k=k)
+    K = np.sum(XA[XA_idxs, :] * XB[XB_idxs, :], axis=1)**zeta
+
+    return K
+
 def center_kernel(K, K_ref=None):
     """
         Centers a kernel matrix
