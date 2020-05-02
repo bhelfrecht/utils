@@ -6,6 +6,8 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from tools import sorted_eigh
 
+# TODO: make function for diagonal kernels similar to build_kernel
+
 def build_phi(KNM, KMM, tiny=1.0E-15):
     """
         Build the approximate feature space based on the Nystrom Approximation.
@@ -198,7 +200,7 @@ def gaussian_kernel(XA, XB, gamma=1):
     K = np.exp(-gamma*D)
     return K
 
-def _diag_indices(shape, k=0):
+def diag_indices(shape, k=0):
     """
         Computes the indices of the kth diagonal
         of a 2D matrix
@@ -223,6 +225,47 @@ def _diag_indices(shape, k=0):
 
     return idxs
 
+def tri_indices(shape, k=0, tri='upper'):
+    """
+        Computes the indices of the upper or lower
+        triangular matrix based on the diagonal
+
+        ---Arguments---
+        shape: 2D tuple in the form (n_rows, n_columns)
+        k: kth diagonal (0 for the main diagonal,
+            k < 0 for below main diagonal, k > 0 for above main diagonal)
+        tri: 'upper' for upper triangular, 'lower' for lower triangular
+
+        ---Returns---
+        idxs: tuple of array indices in the form (row_idxs, col_idxs)
+    """
+
+    if tri == 'upper':
+        start = k
+        end = shape[1]
+
+    elif tri == 'lower':
+        start = -shape[0] + 1
+        end = k + 1
+
+    else:
+        print("Error: 'tri' must be 'upper' or 'lower'")
+        return
+
+    row_idxs = []
+    col_idxs = []
+    for kk in np.arange(start, end):
+        diag_idxs = diag_indices(shape, k=kk)
+        row_idxs.append(diag_idxs[0])
+        col_idxs.append(diag_idxs[1])
+
+    row_idxs = np.concatenate(row_idxs)
+    col_idxs = np.concatenate(col_idxs)
+    row_idxs = np.sort(row_idxs)
+    idxs = (row_idxs, col_idxs)
+
+    return idxs
+
 def gaussian_kernel_diag(XA, XB, gamma=1, k=0):
     """
         Builds only the kth diagonal of a Gaussian kernel
@@ -243,7 +286,7 @@ def gaussian_kernel_diag(XA, XB, gamma=1, k=0):
         print("Error: diagonal index cannot exceed matrix shape")
         return
 
-    XA_idxs, XB_idxs = _diag_indices((XA.shape[0], XB.shape[0]), k=k)
+    XA_idxs, XB_idxs = diag_indices((XA.shape[0], XB.shape[0]), k=k)
     D = np.linalg.norm(XA[XA_idxs, :] - XB[XB_idxs, :], axis=1)**2
     K = np.exp(-gamma*D)
 
@@ -269,10 +312,66 @@ def linear_kernel_diag(XA, XB, zeta=1, k=0):
         print("Error: diagonal index cannot exceed matrix shape")
         return
 
-    XA_idxs, XB_idxs = _diag_indices((XA.shape[0], XB.shape[0]), k=k)
+    XA_idxs, XB_idxs = diag_indices((XA.shape[0], XB.shape[0]), k=k)
     K = np.sum(XA[XA_idxs, :] * XB[XB_idxs, :], axis=1)**zeta
 
     return K
+
+def gaussian_kernel_tri(XA, XB, gamma=1, k=0, tri='upper'):
+    """
+        Builds only the triangular gaussian kernel
+
+        ---Arguments---
+        XA, XB: vectors of data with which to build the
+            triangular kernel
+        gamma: scaling parameter for the Gaussian
+        k: kth diagonal (0 for the main diagonal,
+            k < 0 for below main diagonal, k > 0 for above main diagonal)
+        tri: 'upper' for upper triangular entries or
+            'lower' for lower triangular entries
+    
+        ---Returns---
+        K: nonzero triangular kernel entries as flattened array.
+            Build the triangular kernel with:
+    """
+
+    if k >= XB.shape[0] or k <= -XA.shape[0]:
+        print("Error: diagonal index cannot exceed matrix shape")
+        return
+
+    XA_idxs, XB_idxs = tri_indices((XA.shape[0], XB.shape[0]), k=k, tri=tri)
+    D = np.linalg.norm(XA[XA_idxs, :] - XB[XB_idxs, :], axis=1)**2
+    K = np.exp(-gamma*D)
+
+    return K
+
+def linear_kernel_tri(XA, XB, zeta=1, k=0, tri='upper'):
+    """
+        Builds only the triangular gaussian kernel
+
+        ---Arguments---
+        XA, XB: vectors of data with which to build the
+            triangular kernel
+        zeta: exponent for the linear kernel
+        k: kth diagonal (0 for the main diagonal,
+            k < 0 for below main diagonal, k > 0 for above main diagonal)
+        tri: 'upper' for upper triangular entries or
+            'lower' for lower triangular entries
+    
+        ---Returns---
+        K: nonzero triangular kernel entries as flattened array.
+            Build the triangular kernel with:
+    """
+
+    if k >= XB.shape[0] or k <= -XA.shape[0]:
+        print("Error: diagonal index cannot exceed matrix shape")
+        return
+
+    XA_idxs, XB_idxs = tri_indices((XA.shape[0], XB.shape[0]), k=k, tri=tri)
+    K = np.sum(XA[XA_idxs, :] * XB[XB_idxs, :], axis=1)**zeta
+
+    return K
+
 
 def center_kernel(K, K_ref=None):
     """
