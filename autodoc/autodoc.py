@@ -85,7 +85,9 @@ def parse_replacestr(replacestr):
     """ 
         Parse the replacement string, e.g., "U,V;W,X;Y,Z",
         which replaces U with V, W with X, and Y with Z
-        Return the parsed string as a list of pairs, e.g., [[U, V], [W, X], [Y, Z]] 
+        Return the parsed string as a list of pairs, e.g.,
+        [[U, V], [W, X], [Y, Z]]
+
         ---Arguments---
         replacestr: the replacement string formatted as above
     """
@@ -418,8 +420,7 @@ else:
         g.write('#!/usr/bin/sed -f\n\n')
         g.write('# Files\n')
         for uf in unique_files:
-            uf = os.path.splitext(uf)
-            g.write("/name='.*{:s}\\{:s}'/{{\nn\na\\\n}}\n\n".format(uf[0], uf[1]))
+            g.write("/name='.*{:s}'/{{\nn\na\\\n}}\n\n".format(uf))
 
         g.write('\n')
         g.write('# Directories\n')

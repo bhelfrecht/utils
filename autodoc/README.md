@@ -81,7 +81,7 @@ useful when descriptions need to be duplicated for files with the same name
     2.  To do a more fine-tuned copying, we can use the `copy` and `replace` attibutes of the
         file and directory description tags. To copy a file description for say, change
         the description tag line to, for example, 
-        `<description copy='F2' replace='apple,banana;red,blue'>.
+        `<description copy='F2' replace='apple,banana;red,blue'>`.
         This will copy the description from the file with the ID F2 and replace all substrings
         of "apple" with "banana" and all substrings of "red" with "blue".
         This is useful in cases where we want to duplicate a description but change just
