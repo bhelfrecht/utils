@@ -5,14 +5,7 @@ import sys
 import numpy as np
 from tools import sorted_eigh
 
-# TODO: CHECK IF STANDARDIZATION AFFECTS SCALING
-# IN PCOVR, KPCOVR, AND SPARSE KPCOVR
-# NOTE: SCALING OK, AGREES WITH SKLEARN
-
-# TODO: CHECK IF SCALING IS EQUIVALENT BY CHANGING
-# THE SCALE DIRECTLY IN THE S OR G MATRICES
-# INSTEAD OF IN THE PROJECTION MATRICES
-# TEST FOR BOTH NORMALIZED AND NON-NORMALIZED DATA
+# TODO: remove auxiliary phi centering in sparse methods
 
 class LR(object):
     """
@@ -21,6 +14,9 @@ class LR(object):
         ---Attributes---
         W: regression weights
         reg: regularization parameter
+        reg_type: type of regularization.
+            Choices are 'scalar' (constant regularization),
+            or 'max_eig' (regularization based on maximum eigenvalue)
 
         ---Methods---
         fit: fit the linear regression model by computing regression weights
@@ -30,8 +26,9 @@ class LR(object):
         1.  https://en.wikipedia.org/wiki/Linear_regression
     """
 
-    def __init__(self, reg=1.0E-12, rcond=None):
+    def __init__(self, reg=1.0E-12, reg_type='scalar', rcond=None):
         self.reg = reg
+        self.reg_type = reg_type
         self.rcond = rcond
         self.W = None
 
@@ -43,6 +40,8 @@ class LR(object):
             X: centered independent (predictor) variable
             Y: centered dependent (response) variable
         """
+
+        # TODO: Regularize the model
 
         # Compute LR solution
         self.W = np.linalg.lstsq(X, Y, rcond=self.rcond)[0]
@@ -73,6 +72,9 @@ class KRR(object):
         
         ---Attributes---
         reg: regularization parameter
+        reg_type: type of regularization.
+            Choices are 'scalar' (constant regularization),
+            or 'max_eig' (regularization based on maximum eigenvalue)
         W: regression weights
         
         ---Methods---
@@ -86,8 +88,9 @@ class KRR(object):
             Springer, 2018
     """
     
-    def __init__(self, reg=1.0E-12, rcond=None):
+    def __init__(self, reg=1.0E-12, reg_type='scalar', rcond=None):
         self.reg = reg
+        self.reg_type = reg_type
         self.rcond = rcond
         self.W = None
         
@@ -101,7 +104,15 @@ class KRR(object):
         """
 
         # Regularize the model
-        KX = K + np.eye(K.shape[0])*self.reg
+        if self.reg_type == 'max_eig':
+            scale = np.amax(np.linalg.eigvalsh(K))
+        elif self.reg_type == 'scalar':
+            scale = 1.0
+        else:
+            print("Error: invalid reg_type. Use 'scalar' or 'max_eig'")
+            return
+
+        KX = K + np.eye(K.shape[0])*scale*self.reg
 
         # Solve the model
         self.W = np.linalg.lstsq(KX, Y, rcond=self.rcond)[0]
@@ -134,6 +145,9 @@ class SparseKRR(object):
         ---Attributes---
         sigma: regularization parameter
         reg: additional regularization
+        reg_type: type of regularization.
+            Choices are 'scalar' (constant regularization),
+            or 'max_eig' (regularization based on maximum eigenvalue)
         W: regression weights
         
         ---Methods---
@@ -150,9 +164,10 @@ class SparseKRR(object):
             Conference on Machine Learning, 911-918, 2000
     """
     
-    def __init__(self, sigma=1.0, reg=1.0E-12, rcond=None):
+    def __init__(self, sigma=1.0, reg=1.0E-12, reg_type='scalar', rcond=None):
         self.sigma = sigma
         self.reg = reg
+        self.reg_type = reg_type
         self.rcond = rcond
         self.W = None
         
@@ -161,15 +176,24 @@ class SparseKRR(object):
             Fits the KRR model by computing the regression weights
 
             ---Arguments---
-            KNM: centered kernel between the whole dataset and the representative points
+            KNM: centered kernel between the whole dataset 
+                and the representative points
             KMM: centered kernel between the representative points
             Y: centered property values
         """
+
+        KX = self.sigma*KMM + np.matmul(KNM.T, KNM)
     
         # Regularize the sparse kernel model
-        KX = self.sigma*KMM + np.matmul(KNM.T, KNM)
-        KX += np.eye(KMM.shape[0])*self.reg
+        if self.reg_type == 'max_eig':
+            scale = np.amax(np.linalg.eigvalsh(KX))
+        elif self.reg_type == 'scalar':
+            scale = 1.0
+        else:
+            print("Error: invalid reg_type. Use 'scalar' or 'max_eig'")
+            return
 
+        KX += np.eye(KMM.shape[0])*scale*self.reg
         KY = np.matmul(KNM.T, Y)
 
         # Solve KRR model
@@ -212,6 +236,9 @@ class IterativeSparseKRR(object):
         ---Attributes---
         sigma: regularization parameter
         reg: additional regularization
+        reg_type: type of regularization.
+            Choices are 'scalar' (constant regularization),
+            or 'max_eig' (regularization based on maximum eigenvalue)
         W: regression weights
         KMM: centered kernel between representative points
         KY: product of the KNM kernel and the properties Y
@@ -234,9 +261,10 @@ class IterativeSparseKRR(object):
             Conference on Machine Learning, 911-918, 2000
     """
     
-    def __init__(self, sigma=1, reg=1.0E-12, rcond=None):
+    def __init__(self, sigma=1, reg=1.0E-12, reg_type='scalar', rcond=None):
         self.sigma = sigma
         self.reg = reg
+        self.reg_type = reg_type
         self.rcond = rcond
         self.W = None
         self.KX = None
@@ -268,7 +296,8 @@ class IterativeSparseKRR(object):
             Fits the KRR model by computing the regression weights
 
             ---Arguments---
-            KNM: centered kernel between the whole dataset and the representative points
+            KNM: centered kernel between the whole dataset "
+                "and the representative points
             Y: centered property values
         """
 
@@ -299,7 +328,15 @@ class IterativeSparseKRR(object):
         """
 
         # Regularize the model
-        self.KX += np.eye(self.KX.shape[0])*self.reg
+        if self.reg_type == 'max_eig':
+            scale = np.amax(np.linalg.eigvalsh(KX))
+        elif self.reg_type == 'scalar':
+            scale = 1.0
+        else:
+            print("Error: invalid reg_type. Use 'scalar' or 'max_eig'")
+            return
+
+        self.KX += np.eye(self.KX.shape[0])*scale*self.reg
 
         # Solve KRR model
         self.W = np.linalg.lstsq(self.KX, self.KY, rcond=self.rcond)[0]
@@ -331,6 +368,9 @@ class PCovR(object):
         alpha: tuning parameter between PCA and LR
         n_pca: number of PCA components to retain
         reg: regularization parameter
+        reg_type: type of regularization.
+            Choices are 'scalar' (constant regularization),
+            or 'max_eig' (regularization based on maximum eigenvalue)
         tiny: cutoff for throwing away small eigenvalues
         U: eigenvalues of G
         V: eigenvectors of G
@@ -358,10 +398,12 @@ class PCovR(object):
 
     """
 
-    def __init__(self, alpha=0.0, n_pca=None, reg=1.0E-12, tiny=1.0E-15, rcond=None):
+    def __init__(self, alpha=0.0, n_pca=None, reg=1.0E-12, 
+            reg_type='scalar', tiny=1.0E-15, rcond=None):
         self.alpha = alpha
         self.n_pca = n_pca
         self.reg = reg
+        self.reg_type = reg_type
         self.tiny = tiny
         self.rcond = rcond
         self.U = None
@@ -385,7 +427,7 @@ class PCovR(object):
         """
 
         # Compute predicted Y with LR
-        lr = LR(reg=self.reg, rcond=self.rcond)
+        lr = LR(reg=self.reg, reg_type=self.reg_type, rcond=self.rcond)
         lr.fit(X, Y)
         Yhat = lr.transform(X)
         W = lr.W
@@ -596,6 +638,9 @@ class KPCovR(object):
         n_kpca: number of KPCA components to retain in the latent
             space projection
         reg: regularization parameter
+        reg_type: type of regularization.
+            Choices are 'scalar' (constant regularization),
+            or 'max_eig' (regularization based on maximum eigenvalue)
         tiny: threshold for discarding small eigenvalues
         U: eigenvalues of G
         V: eigenvectors of G
@@ -618,10 +663,12 @@ class KPCovR(object):
 
     """
 
-    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-12, tiny=1.0E-15, rcond=None):
+    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-12, 
+            reg_type='scalar', tiny=1.0E-15, rcond=None):
         self.alpha = alpha
         self.n_kpca = n_kpca
         self.reg = reg
+        self.reg_type = reg_type
         self.tiny = tiny
         self.rcond = rcond
         self.U = None
@@ -646,7 +693,7 @@ class KPCovR(object):
         """
 
         # Compute predicted Y with KRR
-        krr = KRR(reg=self.reg, rcond=self.rcond)
+        krr = KRR(reg=self.reg, reg_type=self.reg_type, rcond=self.rcond)
         krr.fit(K, Y)
         Yhat = krr.transform(K)
         W = krr.W
@@ -758,7 +805,8 @@ class KPCovR(object):
         """
 
         if self.Ptx is None:
-            print("Error: must provide X data during the PCovR fit before transforming")
+            print("Error: must provide X data during the PCovR fit "
+                    "before transforming")
         else:
             T = self.transform_K(K)
             Xr = np.matmul(T, self.Ptx)
@@ -818,6 +866,9 @@ class SparseKPCovR(object):
         alpha: tuning parameter
         n_kpca: number of kernel principal components to retain
         reg: regularization parameter
+        reg_type: type of regularization.
+            Choices are 'scalar' (constant regularization),
+            or 'max_eig' (regularization based on maximum eigenvalue)
         tiny: threshold for discarding small eigenvalues
         T_mean: auxiliary centering for the kernel matrix
             because the centering must be done based on the
@@ -845,10 +896,12 @@ class SparseKPCovR(object):
         transform_Y: computes predicted Y values
     """
 
-    def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, reg=1.0E-12, tiny=1.0E-15, rcond=None):
+    def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, 
+            reg=1.0E-12, reg_type='scalar', tiny=1.0E-15, rcond=None):
         self.alpha = alpha
         self.n_kpca = n_kpca
         self.reg = reg
+        self.reg_type = reg_type
         self.sigma = sigma
         self.tiny = tiny
         self.rcond = rcond
@@ -883,7 +936,8 @@ class SparseKPCovR(object):
         # NOTE: If centered kernels not used, may need to 
         # do instead LR in the centered feature space (i.e., with phi)
         # and KPCA part is based on phi centering as well anyway
-        skrr = SparseKRR(sigma=self.sigma, reg=self.reg, rcond=self.rcond)
+        skrr = SparseKRR(sigma=self.sigma, reg=self.reg, 
+                reg_type=self.reg_type, rcond=self.rcond)
         skrr.fit(KNM, KMM, Y)
         Yhat = skrr.transform(KNM)
         W = skrr.W
@@ -919,6 +973,7 @@ class SparseKPCovR(object):
 
         # Auxiliary centering of phi
         # since we are working with an approximate feature space
+        # TODO: also scale phi?
         phi_mean = np.mean(phi, axis=0)
         phi -= phi_mean
 
@@ -1038,7 +1093,8 @@ class SparseKPCovR(object):
         """
 
         if self.Ptx is None:
-            print("Error: must provide X data during the KPCovR fit before transforming")
+            print("Error: must provide X data during the KPCovR fit "
+                    "before transforming")
         else:
 
             # Compute the KPCA-like projections
@@ -1104,6 +1160,9 @@ class SparseKPCovR(object):
 #        alpha: tuning parameter
 #        n_kpca: number of kernel principal components to retain
 #        reg: regularization parameter
+#        reg_type: type of regularization.
+#            Choices are 'scalar' (constant regularization),
+#            or 'max_eig' (regularization based on maximum eigenvalue)
 #        tiny: threshold for discarding small eigenvalues
 #        T_mean: auxiliary centering for the kernel matrix
 #        phi_mean: mean of RKHS features
@@ -1136,10 +1195,12 @@ class SparseKPCovR(object):
 #        transform_Y: computes predicted Y values
 #    """
 #
-#    def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, reg=1.0E-12, tiny=1.0E-15, rcond=None):
+#    def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, reg=1.0E-12, 
+#            reg_type='scalar', tiny=1.0E-15, rcond=None):
 #        self.alpha = alpha
 #        self.n_kpca = n_kpca
 #        self.reg = reg
+#        self.reg_type = reg_type
 #        self.sigma = sigma
 #        self.tiny = tiny
 #        self.rcond = rcond
@@ -1164,7 +1225,8 @@ class SparseKPCovR(object):
 #
 #            ---Arguments---
 #            KMM: centered kernel matrix between representative points
-#            KNM: centered kernel matrix between input data and representative points
+#            KNM: centered kernel matrix between input data and 
+#                representative points
 #            Y: centered dependent (response) data
 #
 #            ---Returns---
@@ -1202,7 +1264,8 @@ class SparseKPCovR(object):
 #        self.n_samples = 0
 #
 #        # Initialize the iterative sparse KRR
-#        self.iskrr = IterativeSparseKRR(sigma=self.sigma, reg=self.reg, rcond=self.rcond)
+#        self.iskrr = IterativeSparseKRR(sigma=self.sigma, reg=self.reg, 
+#                reg_type=self.reg_type, rcond=self.rcond)
 #
 #    def fit_batch(self, KNM, Y, X=None):
 #        """
