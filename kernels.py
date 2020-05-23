@@ -7,6 +7,7 @@ from scipy.spatial.distance import cdist
 from tools import sorted_eigh
 
 # TODO: make function for diagonal kernels similar to build_kernel
+# TODO: add tqdm to build_kernel
 
 def build_phi(KNM, KMM, tiny=1.0E-15):
     """
@@ -168,12 +169,34 @@ def build_kernel(XA, XB, XR=None, kernel='linear', gamma=1.0, zeta=1.0):
 
     return K
 
+def sqeuclidean_distances(XA, XB):
+    """
+        Evaluation of a distance matrix
+        of squared euclidean distances
+
+        ---Arugments---
+        XA, XB: matrices of data with which to build the distance matrix,
+            where each row is a sample and each column a feature
+
+        ---Returns---
+        D: distance matrix of shape A x B
+    """
+
+    # Reshape so arrays can be broadcast together into shape A x B
+    XA2 = np.sum(XA**2, axis=1).reshape((-1, 1))
+    XB2 = np.sum(XB**2, axis=1).reshape((1, -1))
+
+    # Compute distance matrix
+    D = XA2 + XB2 - 2*np.matmul(XA, XB.T)
+
+    return D
+
 def linear_kernel(XA, XB, zeta=1):
     """
         Builds a dot product kernel
 
         ---Arguments---
-        XA, XB: vectors of data with which to build the kernel,
+        XA, XB: matrices of data with which to build the kernel,
             where each row is a sample and each column a feature
 
         ---Returns---
@@ -188,7 +211,7 @@ def gaussian_kernel(XA, XB, gamma=1):
         Builds a Gaussian kernel
 
         ---Arguments---
-        XA, XB: vectors of data with which to build the kernel,
+        XA, XB: matrices of data with which to build the kernel,
             where each row is a sample and each column a feature
         gamma: scaling parameter for the Gaussian
 
@@ -196,7 +219,7 @@ def gaussian_kernel(XA, XB, gamma=1):
         K: Gaussian kernel between XA and XB
     """
 
-    D = cdist(XA, XB, metric='sqeuclidean')
+    D = sqeuclidean_distances(XA, XB)
     K = np.exp(-gamma*D)
     return K
 
@@ -271,7 +294,7 @@ def gaussian_kernel_diag(XA, XB, gamma=1, k=0):
         Builds only the kth diagonal of a Gaussian kernel
 
         ---Arguments---
-        XA, XB: vectors of data with which to build the
+        XA, XB: matrices of data with which to build the
             kernel diagonal, where each row is a sample
             and each column a feature.
         gamma: scaling parameter for the Gaussian
@@ -297,7 +320,7 @@ def linear_kernel_diag(XA, XB, zeta=1, k=0):
         Builds only the kth diagonal of a linear kernel
 
         ---Arguments---
-        XA, XB: vectors of data with which to build the
+        XA, XB: matrices of data with which to build the
             kernel diagonal, where each row is a sample
             and each column a feature. 
         zeta: exponent for the linear kernel
@@ -322,7 +345,7 @@ def gaussian_kernel_tri(XA, XB, gamma=1, k=0, tri='upper'):
         Builds only the triangular gaussian kernel
 
         ---Arguments---
-        XA, XB: vectors of data with which to build the
+        XA, XB: matrices of data with which to build the
             triangular kernel
         gamma: scaling parameter for the Gaussian
         k: kth diagonal (0 for the main diagonal,
@@ -350,7 +373,7 @@ def linear_kernel_tri(XA, XB, zeta=1, k=0, tri='upper'):
         Builds only the triangular gaussian kernel
 
         ---Arguments---
-        XA, XB: vectors of data with which to build the
+        XA, XB: matrices of data with which to build the
             triangular kernel
         zeta: exponent for the linear kernel
         k: kth diagonal (0 for the main diagonal,
@@ -371,7 +394,6 @@ def linear_kernel_tri(XA, XB, zeta=1, k=0, tri='upper'):
     K = np.sum(XA[XA_idxs, :] * XB[XB_idxs, :], axis=1)**zeta
 
     return K
-
 
 def center_kernel(K, K_ref=None):
     """
