@@ -41,10 +41,27 @@ class LR(object):
             Y: centered dependent (response) variable
         """
 
-        # TODO: Regularize the model
+        XTX = np.matmul(X.T, X)
+
+        # Regularize the model
+        if self.reg_type == 'max_eig':
+            scale = np.amax(np.linalg.eigvalsh(XTX))
+        elif self.reg_type == 'scalar':
+            scale = 1.0
+        else:
+            print("Error: invalid reg_type. Use 'scalar' or 'max_eig'")
+            return
+
+        XTX += np.eye(XTX.shape[0])*scale*self.reg
+        XY = np.matmul(X.T, Y)
 
         # Compute LR solution
-        self.W = np.linalg.lstsq(X, Y, rcond=self.rcond)[0]
+        self.W = np.linalg.lstsq(XTX, XY, rcond=self.rcond)[0]
+
+        # The below is another valid formulation for numpy lstsq;
+        # we use the above so we can add the regularization
+        # and for consistency with the kernel methods
+        #self.W = np.linalg.lstsq(X, Y, rcond=self.rcond)[0]
 
     def transform(self, X):
         """
