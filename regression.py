@@ -5,7 +5,10 @@ import sys
 import numpy as np
 from tools import sorted_eigh
 
-# TODO: remove auxiliary phi centering in sparse methods
+# TODO: Remove auxiliary phi centering in sparse methods
+# TODO: CovR scaling consistent with paper? Should probably include auto-scaling and auto-centering, so make different scale types an option, and make sure sparse is done correctly
+# TODO: Iterative Sparse KPCovR
+# TODO: check loss functions
 
 class LR(object):
     """
@@ -395,6 +398,7 @@ class PCovR(object):
         Ptx: projection matrix from latent space (T) to input space (X)
         Pty: projection matrix from latent space (T) to properties (Y)
         P_scale: scaling for projection matrices
+        Y_norm: scaling for the LR term of G
 
         ---Methods---
         _YW: computes the LR predicted Y and weights
@@ -429,6 +433,7 @@ class PCovR(object):
         self.Ptx = None
         self.Pty = None
         self.P_scale = None
+        self.Y_norm = None
 
     def _YW(self, X, Y):
         """
@@ -439,17 +444,17 @@ class PCovR(object):
             Y: centered dependent (response) variable data
 
             ---Returns---
-            Yhat: centered linear regression prediction of Y
+            Y_hat: centered linear regression prediction of Y
             W: linear regression weights
         """
 
         # Compute predicted Y with LR
         lr = LR(reg=self.reg, reg_type=self.reg_type, rcond=self.rcond)
         lr.fit(X, Y)
-        Yhat = lr.transform(X)
+        Y_hat = lr.transform(X)
         W = lr.W
 
-        return Yhat, W
+        return Y_hat, W
 
     def fit_structure_space(self, X, Y):
         """
@@ -464,15 +469,15 @@ class PCovR(object):
             Y = Y.reshape((-1, 1))
 
         # Compute LR approximation of Y
-        Yhat, W = self._YW(X, Y)
+        Y_hat, W = self._YW(X, Y)
 
         # Set scaling and norms
-        Ynorm = np.linalg.norm(Y)
+        self.Y_norm = np.linalg.norm(Y)
         self.P_scale = np.linalg.norm(X)
 
         # Compute G matrix
         G_pca = np.matmul(X, X.T)/self.P_scale**2
-        G_lr = np.matmul(Yhat, Yhat.T)/Ynorm**2
+        G_lr = np.matmul(Y_hat, Y_hat.T)/self.Y_norm**2
         G = self.alpha*G_pca + (1.0 - self.alpha)*G_lr
 
         # Compute eigendecomposition of G
@@ -484,7 +489,7 @@ class PCovR(object):
 
         # Compute projection matrix Pxt
         Pxt_pca = X.T/self.P_scale**2 
-        Pxt_lr = np.matmul(W, Yhat.T)/Ynorm**2
+        Pxt_lr = np.matmul(W, Y_hat.T)/self.Y_norm**2
 
         self.Pxt = self.alpha*Pxt_pca + (1.0 - self.alpha)*Pxt_lr
         self.Pxt = np.matmul(self.Pxt, self.V)
@@ -514,7 +519,7 @@ class PCovR(object):
             Y = Y.reshape((-1, 1))
 
         # Compute LR approximation of Y
-        Yhat, W = self._YW(X, Y)
+        Y_hat, W = self._YW(X, Y)
 
         # Compute covariance matrix
         C = np.matmul(X.T, X)
@@ -524,7 +529,7 @@ class PCovR(object):
 
         # Set scaling and norms
         self.P_scale = np.linalg.norm(X)
-        Ynorm = np.linalg.norm(Y)
+        self.Y_norm = np.linalg.norm(Y)
 
         # Compute inverse square root of the covariance
         C_inv_sqrt = np.matmul(Vc, np.diagflat(1.0/np.sqrt(Uc)))
@@ -537,7 +542,7 @@ class PCovR(object):
         # Compute the S matrix
         S_pca = C/self.P_scale**2
         S_lr = np.matmul(C_sqrt, W)
-        S_lr = np.matmul(S_lr, S_lr.T)/Ynorm**2
+        S_lr = np.matmul(S_lr, S_lr.T)/self.Y_norm**2
 
         S = self.alpha*S_pca + (1.0-self.alpha)*S_lr
 
@@ -668,6 +673,7 @@ class KPCovR(object):
         Ptk: projection matrix from the latent space (T) to
             the kernel matrix (K)
         P_scale: scaling for the projection matrices
+        Y_norm: scaling for the LR term of G
 
         ---Methods---
         _YW: computes the KRR prediction of Y and weights
@@ -695,6 +701,7 @@ class KPCovR(object):
         self.Ptk = None
         self.Ptx = None
         self.P_scale = None
+        self.Y_norm = None
 
     def _YW(self, K, Y):
         """
@@ -705,17 +712,17 @@ class KPCovR(object):
             Y: centered dependent (response) data
 
             ---Returns---
-            Yhat: centered KRR prediction of Y
+            Y_hat: centered KRR prediction of Y
             W: regression weights
         """
 
         # Compute predicted Y with KRR
         krr = KRR(reg=self.reg, reg_type=self.reg_type, rcond=self.rcond)
         krr.fit(K, Y)
-        Yhat = krr.transform(K)
+        Y_hat = krr.transform(K)
         W = krr.W
 
-        return Yhat, W
+        return Y_hat, W
 
     def fit(self, K, Y, X=None):
         """
@@ -731,15 +738,15 @@ class KPCovR(object):
             Y = Y.reshape((-1, 1))
 
         # Compute predicted Y with KRR
-        Yhat, W = self._YW(K, Y)
+        Y_hat, W = self._YW(K, Y)
 
         # Set scaling and norms
         self.P_scale = np.sqrt(np.trace(K))
-        Ynorm = np.linalg.norm(Y)
+        self.Y_norm = np.linalg.norm(Y)
 
         # Compute G
         G_kpca = K/self.P_scale**2
-        G_krr = np.matmul(Yhat, Yhat.T)/Ynorm**2
+        G_krr = np.matmul(Y_hat, Y_hat.T)/self.Y_norm**2
         G = self.alpha*G_kpca + (1.0 - self.alpha)*G_krr
 
         # Compute eigendecomposition of G
@@ -751,7 +758,7 @@ class KPCovR(object):
 
         # Compute projection matrix Pkt
         Pkt_kpca = np.eye(K.shape[0])/self.P_scale**2
-        Pkt_krr = np.matmul(W, Yhat.T)/Ynorm**2
+        Pkt_krr = np.matmul(W, Y_hat.T)/self.Y_norm**2
 
         self.Pkt = self.alpha*Pkt_kpca + (1.0 - self.alpha)*Pkt_krr
         self.Pkt = np.matmul(self.Pkt, self.V)
@@ -903,6 +910,7 @@ class SparseKPCovR(object):
         Ptk: projection matrix from the latent space (T) to
             the kernel matrix (K)
         P_scale: scaling for projection matrices
+        Y_norm: scaling for the LR term of G
 
         ---Methods---
         fit: fit the sparse KPCovR model
@@ -934,6 +942,7 @@ class SparseKPCovR(object):
         self.Ptk = None
         self.Ptx = None
         self.P_scale = None
+        self.Y_norm = None
 
     def _YW(self, KNM, KMM, Y):
         """
@@ -945,7 +954,7 @@ class SparseKPCovR(object):
             Y: centered dependent (response) data
 
             ---Returns---
-            Yhat: centered KRR prediction of Y
+            Y_hat: centered KRR prediction of Y
             W: regression weights
         """
 
@@ -956,10 +965,10 @@ class SparseKPCovR(object):
         skrr = SparseKRR(sigma=self.sigma, reg=self.reg, 
                 reg_type=self.reg_type, rcond=self.rcond)
         skrr.fit(KNM, KMM, Y)
-        Yhat = skrr.transform(KNM)
+        Y_hat = skrr.transform(KNM)
         W = skrr.W
 
-        return Yhat, W
+        return Y_hat, W
 
     def fit(self, KNM, KMM, Y, X=None):
         """
@@ -975,7 +984,7 @@ class SparseKPCovR(object):
             Y = Y.reshape((-1, 1))
 
         # Compute predicted Y
-        Yhat, W = self._YW(KNM, KMM, Y)
+        Y_hat, W = self._YW(KNM, KMM, Y)
 
         # Compute eigendecomposition of KMM
         self.Um, self.Vm = sorted_eigh(KMM, tiny=self.tiny)
@@ -990,7 +999,6 @@ class SparseKPCovR(object):
 
         # Auxiliary centering of phi
         # since we are working with an approximate feature space
-        # TODO: also scale phi?
         phi_mean = np.mean(phi, axis=0)
         phi -= phi_mean
 
@@ -999,7 +1007,7 @@ class SparseKPCovR(object):
         self.Uc, self.Vc = sorted_eigh(C, tiny=self.tiny)
 
         # Set scaling and norms
-        Ynorm = np.linalg.norm(Y)
+        self.Y_norm = np.linalg.norm(Y)
         self.P_scale = np.sqrt(np.trace(C))
 
         # Compute inverse square root of the covariance
@@ -1013,7 +1021,7 @@ class SparseKPCovR(object):
         # Compute the S matrix
         S_kpca = C/self.P_scale**2
         S_lr = np.matmul(C_sqrt, W)
-        S_lr = np.matmul(S_lr, S_lr.T)/Ynorm**2
+        S_lr = np.matmul(S_lr, S_lr.T)/self.Y_norm**2
 
         S = self.alpha*S_kpca + (1.0 - self.alpha)*S_lr
 
@@ -1117,8 +1125,8 @@ class SparseKPCovR(object):
             # Compute the KPCA-like projections
             T = self.transform_K(KNM)
 
-            # TODO: why does adding T_mean not work?
-            # NOTE: perhaps because we need X centered in feature space,
+            # NOTE: why does adding T_mean not work?
+            # perhaps because we need X centered in feature space,
             # not the RKHS feature space
             Xr = np.matmul(T, self.Ptx)
 
@@ -1163,332 +1171,318 @@ class SparseKPCovR(object):
         Kr = self.inverse_transform_K(KNM)
         Yp = self.transform_Y(KNM)
 
-        # TODO: check sparse kpca loss based on reproducing the RKHS
         L_skpca = np.linalg.norm(KNM - Kr)**2/self.P_scale**2
         L_skrr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
 
         return L_skpca, L_skrr
 
-#class IterativeSparseKPCovR(object):
-#    """
-#        Performs sparsified kernel principal covariates regression
-#
-#        ---Attributes---
-#        alpha: tuning parameter
-#        n_kpca: number of kernel principal components to retain
-#        reg: regularization parameter
-#        reg_type: type of regularization.
-#            Choices are 'scalar' (constant regularization),
-#            or 'max_eig' (regularization based on maximum eigenvalue)
-#        tiny: threshold for discarding small eigenvalues
-#        T_mean: auxiliary centering for the kernel matrix
-#        phi_mean: mean of RKHS features
-#        C: covariance (Phi.T x Phi)
-#            because the centering must be done based on the
-#            feature space, which is approximated
-#        Um: eigenvalues of KMM
-#        Vm: eigenvectors of KMM
-#        Uc: eigenvalues of Phi.T x Phi
-#        Vc: eigenvectors of Phi.T x Phi
-#        U: eigenvalues of S
-#        V: eigenvectors of S
-#        Pkt: projection matrix from the kernel matrix (K) to
-#            the latent space (T)
-#        Pty: projection matrix from the latent space (T) to
-#            the properties (Y)
-#        Ptk: projection matrix from the latent space (T) to
-#            the kernel matrix (K)
-#        P_scale: scaling for projection matrices
-#        iskrr: incremental sparse KRR object
-#
-#        ---Methods---
-#        initialize_fit: initialize the fitting for the sparse KPCovR model
-#        fit_batch: fit a batch of data
-#        finalize_fit: finalize the fitting procedure
-#        transform_K: transform the data into KPCA space
-#        inverse_transform_K: computes the reconstructed kernel matrix
-#        inverse_transform_X: computes the reconstructed original input data
-#            (if provided during the fit)
-#        transform_Y: computes predicted Y values
-#    """
-#
-#    def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, reg=1.0E-12, 
-#            reg_type='scalar', tiny=1.0E-15, rcond=None):
-#        self.alpha = alpha
-#        self.n_kpca = n_kpca
-#        self.reg = reg
-#        self.reg_type = reg_type
-#        self.sigma = sigma
-#        self.tiny = tiny
-#        self.rcond = rcond
-#        self.T_mean = None
-#        self.C = None
-#        self.Um = None
-#        self.Vm = None
-#        self.Uc = None
-#        self.Vc = None
-#        self.U = None
-#        self.V = None
-#        self.Pkt = None
-#        self.Pty = None
-#        self.Ptk = None
-#        self.Ptx = None
-#        self.P_scale = None
-#        self.iskrr = None
-#
-#    def _YW(self, KNM, KMM, Y):
-#        """
-#            Computes the KRR prediction of Y
-#
-#            ---Arguments---
-#            KMM: centered kernel matrix between representative points
-#            KNM: centered kernel matrix between input data and 
-#                representative points
-#            Y: centered dependent (response) data
-#
-#            ---Returns---
-#            Yhat: centered KRR prediction of Y
-#            W: regression weights
-#        """
-#
-#        # Compute the predicted Y with sparse KRR
-#        # NOTE: If centered kernels not used, may need to 
-#        # do instead LR in the centered feature space (i.e., with phi)
-#        # and KPCA part is based on phi centering as well anyway
-#        skrr = SparseKRR(sigma=self.sigma, reg=self.reg, rcond=self.rcond)
-#        skrr.fit(KNM, KMM, Y)
-#        Yhat = skrr.transform(KNM)
-#        W = skrr.W
-#
-#        return Yhat, W
-#
-#    def initialize_fit(self, KMM):
-#        """
-#            Computes the eigendecomposition of the
-#            kernel matrix between the representative points
-#
-#            ---Arguments---
-#            KMM: centered kernel between the representative points
-#        """
-#
-#        # Compute eigendecomposition of KMM
-#        self.Um, self.Vm = sorted_eigh(KMM, tiny=self.tiny)
-#
-#        # Set shape of T_mean and C according ot the
-#        # number of nonzero eigenvalues
-#        self.C = np.zeros((self.Um.size, self.Um.size))
-#        self.T_mean = np.zeros(self.Um.size)
-#        self.n_samples = 0
-#
-#        # Initialize the iterative sparse KRR
-#        self.iskrr = IterativeSparseKRR(sigma=self.sigma, reg=self.reg, 
-#                reg_type=self.reg_type, rcond=self.rcond)
-#
-#    def fit_batch(self, KNM, Y, X=None):
-#        """
-#            Fits a batch of the sparse KPCovR model
-#
-#            ---Arguments---
-#            KNM: centered kernel between all points and the subsampled points
-#            KMM: centered kernel between the subsampled points
-#            Y: centered dependent (response) variable
-#        """
-#
-#        #####
-#        # TODO: how to handle the Y fitting and transforming?
-#        if len(Y.shape) == 1:
-#            Y = Y.reshape((-1, 1))
-#
-#        # Compute predicted Y
-#        Yhat, W = self._YW(KNM, KMM, Y)
-#
-#        # Change from kernel-based W to phi-based W
-#        W = np.matmul(self.Vm.T, W)
-#        W = np.matmul(np.diagflat(np.sqrt(self.Um)), W)
-#        #####
-#
-#        # Compute the feature space data
-#        phi = np.matmul(KNM, self.Vm)
-#        phi = np.matmul(phi, np.diagflat(1.0/np.sqrt(self.Um)))
-#
-#        # Auxiliary centering of phi
-#        # since we are working with an approximate feature space
-#        old_mean = self.T_mean
-#        self.n_samples += phi.shape[0]
-#        self.T_mean = old_mean + np.sum(phi-old_mean, axis=0)/self.n_samples
-#
-#        # Compute the covariance of the approximate RKHS
-#        self.C += np.matmul((phi-self.T_mean).T, phi-old_mean)
-#
-#    def finalize_fit(self):
-#
-#        # Eigiendecomposition of the RKHS covariance
-#        self.Uc, self.Vc = sorted_eigh(C, tiny=self.tiny)
-#
-#        # Compute inverse square root of the covariance
-#        C_inv_sqrt = np.matmul(self.Vc, np.diagflat(1.0/np.sqrt(self.Uc)))
-#        C_inv_sqrt = np.matmul(C_inv_sqrt, self.Vc.T)
-#
-#        # Compute square root of the covariance
-#        C_sqrt = np.matmul(self.Vc, np.diagflat(np.sqrt(self.Uc)))
-#        C_sqrt = np.matmul(C_sqrt, self.Vc.T)
-#
-#        # Compute the S matrix
-#        S_kpca = C/np.trace(C)
-#        S_lr = np.matmul(C_sqrt, W)
-#        S_lr = np.matmul(S_lr, S_lr.T)/np.linalg.norm(Y)**2
-#
-#        S = self.alpha*S_kpca + (1.0 - self.alpha)*S_lr
-#
-#        # Compute eigendecomposition of S
-#        self.U, self.V = sorted_eigh(S, tiny=self.tiny)
-#
-#        # Truncate the projections
-#        self.U = self.U[0:self.n_kpca]
-#        self.V = self.V[:, 0:self.n_kpca]
-#
-#        # Define some matrices that will be re-used
-#        self.P_scale = np.sqrt(np.trace(C))
-#        P = np.matmul(np.diagflat(1.0/np.sqrt(self.U)), self.V.T)
-#        PP = np.matmul(C_inv_sqrt, self.V)
-#        PP = np.matmul(PP, np.diagflat(np.sqrt(self.U)))
-#
-#        # Compute and store mean of the projections
-#        self.T_mean = np.matmul(self.T_mean, PP)
-#        self.T_mean *= self.P_scale 
-#
-#        # Compute projection matrix Pkt
-#        self.Pkt = np.matmul(self.Vm, np.diagflat(1.0/np.sqrt(self.Um)))
-#        self.Pkt = np.matmul(self.Pkt, PP)
-#        self.Pkt *= self.P_scale
-#
-#        # Compute projection matrix Pty
-#        self.Pty = np.matmul(P, C_inv_sqrt)
-#        self.Pty = np.matmul(self.Pty, phi.T)
-#        self.Pty = np.matmul(self.Pty, Y)
-#        self.Pty /= self.P_scale
-#
-#        # Compute projection matrix Ptk
-#        self.Ptk = np.matmul(P, C_sqrt)
-#        self.Ptk = np.matmul(self.Ptk, np.diagflat(np.sqrt(self.Um)))
-#        self.Ptk = np.matmul(self.Ptk, self.Vm.T)
-#        self.Ptk /= self.P_scale
-#
-#        # Compute projection matrix Ptx
-#        if X is not None:
-#            self.Ptx = np.matmul(P, C_inv_sqrt)
-#            self.Ptx = np.matmul(self.Ptx, phi.T)
-#            self.Ptx = np.matmul(self.Ptx, X)
-#            self.Ptx /= self.P_scale
-#
-#    def transform_K(self, KNM):
-#        """
-#            Transform the data into KPCA space
-#
-#            ---Arguments---
-#            KNM: centered kernel between all points and the representative points
-#
-#            ---Returns---
-#            T: centered transformed data
-#        """
-#
-#        if self.Pkt is None:
-#            print("Error: must fit the KPCovR model before transforming")
-#        else:
-#
-#            # Compute the KPCA-like projections
-#            T = np.matmul(KNM, self.Pkt) - self.T_mean
-#
-#            return T
-#
-#    def inverse_transform_K(self, KNM):
-#        """
-#            Compute the reconstruction of the kernel matrix
-#
-#            ---Arguments---
-#            KNM: centered kernel between all points and the representative points
-#
-#            ---Returns---
-#            Kr: centered reconstructed kernel matrix
-#        """
-#
-#        if self.Ptk is None:
-#            print("Error: must fit the KPCovR model before transforming")
-#        else:
-#
-#            # Compute the KPCA-like projections
-#            T = self.transform_K(KNM)
-#            Kr = np.matmul(T + self.T_mean, self.Ptk)
-#
-#            return Kr
-#
-#    def inverse_transform_X(self, KNM):
-#        """
-#            Compute the reconstruction of the X data
-#
-#            ---Arguments---
-#            KNM: centered kernel between all points and the representative points
-#
-#            ---Returns---
-#            Xr: centered reconstructed X data
-#        """
-#
-#        if self.Ptx is None:
-#            print("Error: must provide X data during the KPCovR fit before transforming")
-#        else:
-#
-#            # Compute the KPCA-like projections
-#            T = self.transform_K(KNM)
-#
-#            # TODO: why does adding T_mean not work?
-#            # NOTE: perhaps because we need X centered in feature space,
-#            # not the RKHS feature space
-#            Xr = np.matmul(T, self.Ptx)
-#
-#            return Xr
-#
-#    def transform_Y(self, KNM):
-#        """
-#            Compute the predictions of Y
-#
-#            ---Arguments---
-#            KNM: centered kernel between all points and the representative points
-#
-#            ---Returns---
-#            Yp: centered predicted Y values
-#        """
-#
-#        if self.Pty is None:
-#            print("Error: must fit the KPCovR model before transforming")
-#        else:
-#
-#            # Compute predicted Y values
-#            T = self.transform_K(KNM)
-#            Yp = np.matmul(T + self.T_mean, self.Pty)
-#
-#            return Yp
-#
-#    def loss(self, KNM, Y):
-#        """
-#            Compute the sparse KPCA and sparse KRR loss functions
-#
-#            ---Arguments---
-#            KNM: centered kernel between the samples and representative points
-#            Y: centered dependent (response) data
-#
-#            ---Returns---
-#            L_skpca: sparse KPCA loss
-#            L_skrr: sparse KRR loss
-#
-#        """
-#
-#        # Compute the reconstructed kernel and predicted Y
-#        Kr = self.inverse_transform_K(KNM)
-#        Yp = self.transform_Y(KNM)
-#
-#        # TODO: check sparse kpca loss based on reproducing the RKHS
-#        L_skpca = np.linalg.norm(KNM - Kr)**2/self.P_scale**2
-#        L_skrr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
-#
-#        return L_skpca, L_skrr
-#
+class IterativeSparseKPCovR(object):
+    """
+        Performs sparsified kernel principal covariates regression
+        with iterative fitting
+
+        ---Attributes---
+        alpha: tuning parameter
+        n_kpca: number of kernel principal components to retain
+        reg: regularization parameter
+        reg_type: type of regularization.
+            Choices are 'scalar' (constant regularization),
+            or 'max_eig' (regularization based on maximum eigenvalue)
+        tiny: threshold for discarding small eigenvalues
+        T_mean: auxiliary centering for the kernel matrix
+        phi_mean: mean of RKHS features
+        C: covariance (Phi.T x Phi)
+            because the centering must be done based on the
+            feature space, which is approximated
+        Um: eigenvalues of KMM
+        Vm: eigenvectors of KMM
+        Uc: eigenvalues of Phi.T x Phi
+        Vc: eigenvectors of Phi.T x Phi
+        U: eigenvalues of S
+        V: eigenvectors of S
+        Pkt: projection matrix from the kernel matrix (K) to
+            the latent space (T)
+        Pty: projection matrix from the latent space (T) to
+            the properties (Y)
+        Ptk: projection matrix from the latent space (T) to
+            the kernel matrix (K)
+        P_scale: scaling for projection matrices
+        Y_norm: scaling for the LR term of G
+        iskrr: incremental sparse KRR object
+
+        ---Methods---
+        initialize_fit: initialize the fitting for the sparse KPCovR model
+        fit_batch: fit a batch of data
+        finalize_fit: finalize the fitting procedure
+        transform_K: transform the data into KPCA space
+        inverse_transform_K: computes the reconstructed kernel matrix
+        inverse_transform_X: computes the reconstructed original input data
+            (if provided during the fit)
+        transform_Y: computes predicted Y values
+    """
+
+    def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, reg=1.0E-12, 
+            reg_type='scalar', tiny=1.0E-15, rcond=None):
+        self.alpha = alpha
+        self.n_kpca = n_kpca
+        self.reg = reg
+        self.reg_type = reg_type
+        self.sigma = sigma
+        self.tiny = tiny
+        self.rcond = rcond
+        self.T_mean = None
+        self.C = None
+        self.Um = None
+        self.Vm = None
+        self.Uc = None
+        self.Vc = None
+        self.U = None
+        self.V = None
+        self.Pkt = None
+        self.Pty = None
+        self.Ptk = None
+        self.Ptx = None
+        self.P_scale = None
+        self.Y_norm = None
+        self.iskrr = None
+
+    def initialize_fit(self, KMM, y_dim=1):
+        """
+            Computes the eigendecomposition of the
+            kernel matrix between the representative points
+
+            ---Arguments---
+            KMM: centered kernel between the representative points
+            y_dim: number of properties
+        """
+
+        # Compute eigendecomposition of KMM
+        self.Um, self.Vm = sorted_eigh(KMM, tiny=self.tiny)
+
+        # Set shape of T_mean and C according ot the
+        # number of nonzero eigenvalues
+        self.C = np.zeros((self.Um.size, self.Um.size))
+        self.T_mean = np.zeros(self.Um.size)
+        self.n_samples = 0
+        self.Y_norm = 0
+
+        # Initialize the iterative sparse KRR
+        self.iskrr = IterativeSparseKRR(sigma=self.sigma, reg=self.reg, 
+                reg_type=self.reg_type, rcond=self.rcond)
+
+        self.iskrr.initialize_fit(KMM, y_dim=y_dim)
+
+    def fit_batch(self, KNM, Y, X=None):
+        """
+            Fits a batch of the sparse KPCovR model
+
+            ---Arguments---
+            KNM: centered kernel between all points and the subsampled points
+            KMM: centered kernel between the subsampled points
+            Y: centered dependent (response) variable
+        """
+
+        # Iterative fit of the ISKRR
+        self.iskrr.fit_batch(KNM, Y)
+
+        # Iterative norm computation
+        self.Y_norm += np.sum(Y**2)
+
+        # Compute the feature space data
+        phi = np.matmul(KNM, self.Vm)
+        phi = np.matmul(phi, np.diagflat(1.0/np.sqrt(self.Um)))
+
+        # Auxiliary centering of phi
+        # since we are working with an approximate feature space
+        old_mean = self.T_mean
+        self.n_samples += phi.shape[0]
+        self.T_mean = old_mean + np.sum(phi-old_mean, axis=0)/self.n_samples
+
+        # Compute the covariance of the approximate RKHS
+        self.C += np.matmul((phi-self.T_mean).T, phi-old_mean)
+
+        # TODO: incremental fit on X (if provided) for inverse transformation
+        # Do with separate functions like IterativeSparseKPCA
+
+    def finalize_fit(self):
+
+        # Set scaling and norms
+        self.P_scale = np.sqrt(np.trace(self.C))
+        self.Y_norm = np.sqrt(self.Y_norm)
+
+        # Extract weights from the ISKRR
+        self.iskrr.finalize_fit()
+        W = self.iskrr.W
+
+        # Change from kernel-based W to phi-based W
+        W = np.matmul(self.Vm.T, W)
+        W = np.matmul(np.diagflat(np.sqrt(self.Um)), W)
+
+        # Eigiendecomposition of the RKHS covariance
+        self.Uc, self.Vc = sorted_eigh(self.C, tiny=self.tiny)
+
+        # Compute inverse square root of the covariance
+        C_inv_sqrt = np.matmul(self.Vc, np.diagflat(1.0/np.sqrt(self.Uc)))
+        C_inv_sqrt = np.matmul(C_inv_sqrt, self.Vc.T)
+
+        # Compute square root of the covariance
+        C_sqrt = np.matmul(self.Vc, np.diagflat(np.sqrt(self.Uc)))
+        C_sqrt = np.matmul(C_sqrt, self.Vc.T)
+
+        # Compute the S matrix
+        S_kpca = C/self.P_scale**2
+        S_lr = np.matmul(C_sqrt, W)
+        S_lr = np.matmul(S_lr, S_lr.T)/self.Y_norm**2
+
+        S = self.alpha*S_kpca + (1.0 - self.alpha)*S_lr
+
+        # Compute eigendecomposition of S
+        self.U, self.V = sorted_eigh(S, tiny=self.tiny)
+
+        # Truncate the projections
+        self.U = self.U[0:self.n_kpca]
+        self.V = self.V[:, 0:self.n_kpca]
+
+        # Define some matrices that will be re-used
+        P = np.matmul(np.diagflat(1.0/np.sqrt(self.U)), self.V.T)
+        PP = np.matmul(C_inv_sqrt, self.V)
+        PP = np.matmul(PP, np.diagflat(np.sqrt(self.U)))
+
+        # Compute and store mean of the projections
+        self.T_mean = np.matmul(self.T_mean, PP)
+        self.T_mean *= self.P_scale 
+
+        # Compute projection matrix Pkt
+        self.Pkt = np.matmul(self.Vm, np.diagflat(1.0/np.sqrt(self.Um)))
+        self.Pkt = np.matmul(self.Pkt, PP)
+        self.Pkt *= self.P_scale
+
+        # Compute projection matrix Pty
+        self.Pty = np.matmul(P, C_inv_sqrt)
+        self.Pty = np.matmul(self.Pty, phi.T)
+        self.Pty = np.matmul(self.Pty, Y)
+        self.Pty /= self.P_scale
+
+        # Compute projection matrix Ptk
+        self.Ptk = np.matmul(P, C_sqrt)
+        self.Ptk = np.matmul(self.Ptk, np.diagflat(np.sqrt(self.Um)))
+        self.Ptk = np.matmul(self.Ptk, self.Vm.T)
+        self.Ptk /= self.P_scale
+
+        # Compute projection matrix Ptx
+        if X is not None:
+            self.Ptx = np.matmul(P, C_inv_sqrt)
+            self.Ptx = np.matmul(self.Ptx, phi.T)
+            self.Ptx = np.matmul(self.Ptx, X)
+            self.Ptx /= self.P_scale
+
+    def transform_K(self, KNM):
+        """
+            Transform the data into KPCA space
+
+            ---Arguments---
+            KNM: centered kernel between all points and the representative points
+
+            ---Returns---
+            T: centered transformed data
+        """
+
+        if self.Pkt is None:
+            print("Error: must fit the KPCovR model before transforming")
+        else:
+
+            # Compute the KPCA-like projections
+            T = np.matmul(KNM, self.Pkt) - self.T_mean
+
+            return T
+
+    def inverse_transform_K(self, KNM):
+        """
+            Compute the reconstruction of the kernel matrix
+
+            ---Arguments---
+            KNM: centered kernel between all points and the representative points
+
+            ---Returns---
+            Kr: centered reconstructed kernel matrix
+        """
+
+        if self.Ptk is None:
+            print("Error: must fit the KPCovR model before transforming")
+        else:
+
+            # Compute the KPCA-like projections
+            T = self.transform_K(KNM)
+            Kr = np.matmul(T + self.T_mean, self.Ptk)
+
+            return Kr
+
+    def inverse_transform_X(self, KNM):
+        """
+            Compute the reconstruction of the X data
+
+            ---Arguments---
+            KNM: centered kernel between all points and the representative points
+
+            ---Returns---
+            Xr: centered reconstructed X data
+        """
+
+        if self.Ptx is None:
+            print("Error: must provide X data during the KPCovR fit before transforming")
+        else:
+
+            # Compute the KPCA-like projections
+            T = self.transform_K(KNM)
+
+            # NOTE: why does adding T_mean not work?
+            # perhaps because we need X centered in feature space,
+            # not the RKHS feature space
+            Xr = np.matmul(T, self.Ptx)
+
+            return Xr
+
+    def transform_Y(self, KNM):
+        """
+            Compute the predictions of Y
+
+            ---Arguments---
+            KNM: centered kernel between all points and the representative points
+
+            ---Returns---
+            Yp: centered predicted Y values
+        """
+
+        if self.Pty is None:
+            print("Error: must fit the KPCovR model before transforming")
+        else:
+
+            # Compute predicted Y values
+            T = self.transform_K(KNM)
+            Yp = np.matmul(T + self.T_mean, self.Pty)
+
+            return Yp
+
+    def loss(self, KNM, Y):
+        """
+            Compute the sparse KPCA and sparse KRR loss functions
+
+            ---Arguments---
+            KNM: centered kernel between the samples and representative points
+            Y: centered dependent (response) data
+
+            ---Returns---
+            L_skpca: sparse KPCA loss
+            L_skrr: sparse KRR loss
+
+        """
+
+        # Compute the reconstructed kernel and predicted Y
+        Kr = self.inverse_transform_K(KNM)
+        Yp = self.transform_Y(KNM)
+
+        L_skpca = np.linalg.norm(KNM - Kr)**2/self.P_scale**2
+        L_skrr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
+
+        return L_skpca, L_skrr
+
