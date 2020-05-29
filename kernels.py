@@ -563,7 +563,7 @@ def center_kernel_oos(K, K_bridge, K_ref):
     """
 
     if (K.shape[0] != K.shape[1] or 
-        K.shape[0] != K_bridge.shape[1] or
+        K.shape[0] != K_bridge.shape[0] or
         K_bridge.shape[1] != K_ref.shape[0] or 
         K_ref.shape[0] != K_ref.shape[1]):
         print("Error: kernels must have compatible shapes " \
