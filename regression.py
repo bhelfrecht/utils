@@ -7,7 +7,6 @@ from tools import sorted_eigh
 
 # TODO: Remove auxiliary phi centering in sparse methods
 # TODO: CovR scaling consistent with paper? Should probably include auto-scaling and auto-centering, so make different scale types an option, and make sure sparse is done correctly
-# TODO: Iterative Sparse KPCovR
 # TODO: check loss functions
 
 class LR(object):
@@ -1272,7 +1271,7 @@ class IterativeSparseKPCovR(object):
 
         self.iskrr.initialize_fit(KMM, y_dim=y_dim)
 
-    def fit_batch(self, KNM, Y, X=None):
+    def fit_batch(self, KNM, Y):
         """
             Fits a batch of the sparse KPCovR model
 
@@ -1304,7 +1303,7 @@ class IterativeSparseKPCovR(object):
         # TODO: incremental fit on X (if provided) for inverse transformation
         # Do with separate functions like IterativeSparseKPCA
 
-    def finalize_fit(self):
+    def finalize_fit(self, X=None):
 
         # Set scaling and norms
         self.P_scale = np.sqrt(np.trace(self.C))
