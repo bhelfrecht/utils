@@ -6,8 +6,9 @@ import numpy as np
 from tools import sorted_eigh
 
 # TODO: Remove auxiliary phi centering in sparse methods
-# TODO: CovR scaling consistent with paper? Should probably include auto-scaling and auto-centering, so make different scale types an option, and make sure sparse is done correctly
+# TODO: CovR scaling consistent with paper? Should probably include auto-scaling and auto-centering, so make different scale types an option, and make sure sparse is done correctly. Also try per-property Y (and X) scaling, which will propagate to the loss functions 
 # TODO: check loss functions
+# TODO: make abstract base class with fit, transform, losses
 
 class LR(object):
     """
@@ -406,7 +407,9 @@ class PCovR(object):
         transform_X: computes the projected X
         inverse_transform_X: computes the reconstructed X
         transform_Y: computes the projected Y
-        loss: computes the components of the loss functions
+        regression_loss: computes the linear regression loss
+        projection_loss: computes the projection loss
+        gram_loss: computes the Gram loss
 
         ---References---
         1.  S. de Jong, H. A. L. Kiers, 'Principal Covariates
@@ -627,28 +630,58 @@ class PCovR(object):
 
             return Yp
 
-    def loss(self, X, Y):
+    def regression_loss(self, X, Y):
         """
-            Compute the PCA and LR loss functions
+            Compute the (linear) regression loss
 
             ---Arguments---
             X: centered independent (predictor) data
             Y: centered dependent (response) data
 
             ---Returns---
-            L_pca: PCA loss
-            L_lr: LR loss
+            regression_loss: regression loss
         """
 
-        # Compute reconstructed X and predicted Y
-        Xr = self.inverse_transform_X(X)
+        # Compute loss
         Yp = self.transform_Y(X)
+        regression_loss = np.linalg.norm(Y - Yp)**2/self.Y_norm**2
 
-        # Compute separate loss terms
-        L_pca = np.linalg.norm(X - Xr)**2/self.P_scale**2
-        L_lr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
+        return regression_loss
 
-        return L_pca, L_lr
+    def projection_loss(self, X):
+        """
+            Compute the projection loss
+
+            ---Arguments---
+            X: centered independent (predictor) data
+
+            ---Returns---
+            projection_loss: projection loss
+        """
+
+        # Compute loss
+        Xr = self.inverse_transform_X(X)
+        projection_loss = np.linalg.norm(X - Xr)**2/self.P_scale**2
+
+        return projection_loss
+
+    def gram_loss(self, X):
+        """
+            Compute the Gram loss
+
+            ---Arguments---
+            X: centered independent (predictor) data
+
+            ---Returns---
+            gram_loss: gram loss
+        """
+
+        # Compute loss
+        T = self.transform_X(X)
+        gram_loss = np.linalg.norm(np.matmul(X, X.T) \
+                - np.matmul(T, T.T))**2 / self.P_scale**4
+
+        return gram_loss
 
 class KPCovR(object):
     """
@@ -682,6 +715,9 @@ class KPCovR(object):
         inverse_transform_X: computes the reconstructed original data
             (if provided during the fit)
         transform_Y: yields predicted Y values based on KRR
+        regression_loss: compute the kernel ridge regression loss
+        projection_loss: compute the projection loss
+        gram_loss: compute the Gram loss
 
     """
 
@@ -857,29 +893,62 @@ class KPCovR(object):
 
             return Yp
 
-    def loss(self, K, Y):
+    def regression_loss(self, K, Y):
         """
-            Compute the KPCA and KRR loss functions
+            Compute the (kernel) regression loss
 
             ---Arguments---
-            K: centered kernel matrix
+            K: centered kernel
             Y: centered dependent (response) data
 
             ---Returns---
-            L_kpca: KPCA loss
-            L_krr: KRR loss
-
+            regression_loss: regression loss
         """
 
-        # Compute the reconstructed kernel and predicted Y
-        Kr = self.inverse_transform_K(K)
+        # Compute loss
         Yp = self.transform_Y(K)
+        regression_loss = np.linalg.norm(Y - Yp)**2/self.Y_norm**2
 
-        #L_kpca = np.linalg.norm(K - Kr)**2/self.P_scale**2
-        L_kpca = np.linalg.norm(K - Kr)**2/self.P_scale**4 # Tr(K)^2 in denominator for reproducing RKHS
-        L_lr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
+        return regression_loss
 
-        return L_kpca, L_lr
+    def projection_loss(self, K, K_bridge=None, K_ref=None):
+        """
+            Compute the projection loss
+
+            ---Arguments---
+            X: centered independent (predictor) data
+
+            ---Returns---
+            projection_loss: projection loss
+        """
+
+        # TODO: special formulation
+        # Compute loss
+        if K_bridge is not None and K_ref is not None:
+            pass
+        else:
+            pass
+
+        projection_loss = None
+
+        return projection_loss
+
+    def gram_loss(self, K):
+        """
+            Compute the Gram loss
+
+            ---Arguments---
+            K: centered kernel
+
+            ---Returns---
+            gram_loss: Gram loss
+        """
+
+        # Compute loss
+        T = self.transform_K(K)
+        gram_loss = np.linalg.norm(K - np.matmul(T, T.T))**2 / self.P_scale**4
+
+        return gram_loss
 
 class SparseKPCovR(object):
     """
@@ -918,6 +987,9 @@ class SparseKPCovR(object):
         inverse_transform_X: computes the reconstructed original input data
             (if provided during the fit)
         transform_Y: computes predicted Y values
+        regression_loss: computes the sparse kernel ridge regression loss
+        projection_loss: computes the projection loss
+        gram_loss: computes the Gram loss
     """
 
     def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, 
@@ -1152,28 +1224,68 @@ class SparseKPCovR(object):
 
             return Yp
 
-    def loss(self, KNM, Y):
+    def regression_loss(self, KNM, Y):
         """
-            Compute the sparse KPCA and sparse KRR loss functions
+            Compute the (kernel) regression loss
 
             ---Arguments---
-            KNM: centered kernel between the samples and representative points
+            KNM: centered kernel
             Y: centered dependent (response) data
 
             ---Returns---
-            L_skpca: sparse KPCA loss
-            L_skrr: sparse KRR loss
-
+            regression_loss: regression loss
         """
 
-        # Compute the reconstructed kernel and predicted Y
-        Kr = self.inverse_transform_K(KNM)
+        # Compute loss
         Yp = self.transform_Y(KNM)
+        regression_loss = np.linalg.norm(Y - Yp)**2/self.Y_norm**2
 
-        L_skpca = np.linalg.norm(KNM - Kr)**2/self.P_scale**2
-        L_skrr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
+        return regression_loss
 
-        return L_skpca, L_skrr
+    def projection_loss(self, KNM, KMM):
+        """
+            Compute the projection loss
+
+            ---Arguments---
+            K: centered kernel
+
+            ---Returns---
+            projection_loss: projection loss
+        """
+
+        # TODO: special formulation
+        # Compute loss
+        projection_loss = None
+
+        return projection_loss
+
+    def gram_loss(self, KNM, KMM, KNM_ref=None):
+        """
+            Compute the Gram loss
+
+            ---Arguments---
+            KNM: centered kernel between data and representative points
+            KMM: centered kernel between representative points
+            KNM_ref: centered reference kernel between the (training) points
+                and the reference points
+
+            ---Returns---
+            gram_loss: Gram loss
+        """
+
+        T = self.transform_K(KNM)
+        K = np.matmul(KNM, np.linalg.inv(KMM))
+
+        # Compute Nystrom approximation to the kernel
+        if KNM_ref is not None:
+            K = np.matmul(K, KNM_ref.T)
+        else:
+            K = np.matmul(K, KNM.T)
+
+        # Compute loss
+        gram_loss = np.linalg.norm(K - np.matmul(T, T.T))**2 / self.P_scale**4
+
+        return gram_loss
 
 class IterativeSparseKPCovR(object):
     """
@@ -1218,6 +1330,9 @@ class IterativeSparseKPCovR(object):
         inverse_transform_X: computes the reconstructed original input data
             (if provided during the fit)
         transform_Y: computes predicted Y values
+        regression_loss: computes the sparse kernel ridge regression loss
+        projection_loss: computes the projection loss
+        gram_loss: computes the Gram loss
     """
 
     def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, reg=1.0E-12, 
@@ -1462,26 +1577,65 @@ class IterativeSparseKPCovR(object):
 
             return Yp
 
-    def loss(self, KNM, Y):
+    def regression_loss(self, K, Y):
         """
-            Compute the sparse KPCA and sparse KRR loss functions
+            Compute the (kernel) regression loss
 
             ---Arguments---
-            KNM: centered kernel between the samples and representative points
+            K: centered kernel
             Y: centered dependent (response) data
 
             ---Returns---
-            L_skpca: sparse KPCA loss
-            L_skrr: sparse KRR loss
-
+            regression_loss: regression loss
         """
 
-        # Compute the reconstructed kernel and predicted Y
-        Kr = self.inverse_transform_K(KNM)
-        Yp = self.transform_Y(KNM)
+        # Compute loss
+        Yp = self.transform_Y(K)
+        regression_loss = np.linalg.norm(Y - Yp)**2/self.Y_norm**2
 
-        L_skpca = np.linalg.norm(KNM - Kr)**2/self.P_scale**2
-        L_skrr = np.linalg.norm(Y - Yp)**2/np.linalg.norm(Y)**2
+        return regression_loss
 
-        return L_skpca, L_skrr
+    def projection_loss(self, K):
+        """
+            Compute the projection loss
 
+            ---Arguments---
+            K: centered kernel
+
+            ---Returns---
+            projection_loss: projection loss
+        """
+
+        # TODO: special formulation
+        # Compute loss
+        projection_loss = None
+
+        return projection_loss
+
+    def gram_loss(self, KNM, KMM, KNM_ref=None):
+        """
+            Compute the Gram loss
+
+            ---Arguments---
+            KNM: centered kernel between data and representative points
+            KMM: centered kernel between representative points
+            KNM_ref: centered reference kernel between the (training) points
+                and the reference points
+
+            ---Returns---
+            gram_loss: Gram loss
+        """
+
+        T = self.transform_K(KNM)
+        K = np.matmul(KNM, np.linalg.inv(KMM))
+
+        # Compute Nystrom approximation to the kernel
+        if KNM_ref is not None:
+            K = np.matmul(K, KNM_ref.T)
+        else:
+            K = np.matmul(K, KNM.T)
+
+        # Compute loss
+        gram_loss = np.linalg.norm(K - np.matmul(T, T.T))**2 / self.P_scale**4
+
+        return gram_loss
