@@ -4,9 +4,11 @@ import os
 import sys
 import numpy as np
 from tqdm import tqdm
-from regression import LR
+from regression import LR, KRR
 from tools import sorted_eigh, sorted_svd
 
+# TODO: combine _compute_G* into single function
+# TODO: change normalization of _compute_G* to be similar to regression.py
 def _compute_G(X, Y, alpha=0.0, reg=1.0E-15):
     """
         Compute the PCovR "kernel"
@@ -24,12 +26,41 @@ def _compute_G(X, Y, alpha=0.0, reg=1.0E-15):
     # Build linear regression model
     lr = LR(reg=reg)
     lr.fit(X, Y)
-    Yhat = lr.transform(X)
+    Y_hat = lr.transform(X)
 
     # Compute G matrix
     G_pca = np.matmul(X, X.T)/np.linalg.norm(X)**2
-    G_lr = np.matmul(Yhat, Yhat.T)/np.linalg.norm(Y)**2
+    G_lr = np.matmul(Y_hat, Y_hat.T)/np.linalg.norm(Y)**2
     G = alpha*G_pca + (1.0-alpha)*G_lr
+
+    return G
+
+def _compute_G_kernel(K, Y, alpha=0.0, reg=1.0E-15, 
+        reg_type='scalar', rcond=None):
+    """
+        Compute the KPCovR "kernel"
+
+        ---Arguments---
+        K: centered kernel
+        Y: centered dependent (response) data
+        alpha: KPCovR alpha
+        reg: regularization parameter for kernel ridge regression
+        reg_type: regularization type, 'scalar' or 'max_eig'
+        rcond: rcond parameter for numpy.lstsq solution
+
+        ---Returns---
+        G: KPCovR kernel
+    """
+
+    # Build kernel ridge regression model
+    krr = KRR(reg=reg, reg_type=reg_type, rcond=rcond)
+    krr.fit(K, Y)
+    Y_hat = krr.transform(K)
+
+    # Compute G matrix
+    G_kpca = K / np.trace(K)
+    G_krr = np.matmul(Y_hat, Y_hat.T) / np.linalg.norm(Y)**2
+    G = alpha*G_kpca + (1.0 - alpha)*G_krr
 
     return G
 
