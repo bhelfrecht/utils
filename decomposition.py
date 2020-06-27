@@ -234,7 +234,7 @@ class SparseKPCA(object):
     def __init__(self, n_components=None, tiny=1.0E-15):
         self.n_components = n_components
         self.tiny = tiny
-        self.T_mean = None
+        ###self.T_mean = None
         self.Um = None
         self.Vm = None
         self.Uc = None
@@ -260,8 +260,9 @@ class SparseKPCA(object):
 
         # Auxiliary centering of T
         # since we are working with an approximate feature space
-        self.T_mean = np.mean(T, axis=0)
-        T -= self.T_mean
+        # TODO: also scale T?
+        ###self.T_mean = np.mean(T, axis=0)
+        ###T -= self.T_mean
 
         # Compute covariance of projections, since the eigenvectors
         # of KMM are not necessarily uncorrelated for the whole
@@ -271,7 +272,7 @@ class SparseKPCA(object):
         # Eigendecomposition on the covariance
         self.Uc, self.Vc = sorted_eigh(C, tiny=None)
 
-        self.T_mean = np.matmul(self.T_mean, self.Vc)
+        ###self.T_mean = np.matmul(self.T_mean, self.Vc)
 
         # Compute projection matrix
         self.V = np.matmul(self.Vm, np.diagflat(1.0/np.sqrt(self.Um)))
@@ -279,8 +280,8 @@ class SparseKPCA(object):
 
         # Truncate the projections
         # TODO: how to compute and truncate the eigenvalues?
-        self.V = self.V[:, 0:self.n_kpca]
-        self.T_mean = self.T_mean[0:self.n_kpca]
+        self.V = self.V[:, 0:self.n_components]
+        ###self.T_mean = self.T_mean[0:self.n_components]
 
     def transform(self, KNM):
         """
@@ -297,7 +298,7 @@ class SparseKPCA(object):
         if self.V is None:
             print("Error: must fit the KPCA before transforming")
         else:
-            T = np.matmul(KNM, self.V) - self.T_mean
+            T = np.matmul(KNM, self.V) ###- self.T_mean
             return T
 
 
