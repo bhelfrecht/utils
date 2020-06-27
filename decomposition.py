@@ -164,7 +164,7 @@ class KPCA(object):
 
             return T
 
-    def inverse_transform(self, KTT, KXT, X, reg=1.0E-12, rcond=None):
+    def inverse_transform(self, KTT, KXT, X, regularization=1.0E-12, rcond=None):
         """
             Computes the reconstruction of X
 
@@ -173,7 +173,7 @@ class KPCA(object):
             KXT: centered kernel between the transformed data and the 
                 transformed training data
             X: the centered original input data
-            reg: regularization for the KRR scheme to find the pre-image
+            regularization: regularization for the KRR scheme to find the pre-image
             rcond: cutoff ratio for small singular values in the least squares
                 solution to determine the inverse transform
 
@@ -190,7 +190,7 @@ class KPCA(object):
 
         # Build the KRR model and get the weights
         # (Can also use LR solution)
-        krr = KRR(reg=reg, rcond=rcond)
+        krr = KRR(regularization=regularization, rcond=rcond)
         krr.fit(KTT, X)
         W = krr.W
 
@@ -302,7 +302,8 @@ class SparseKPCA(object):
             return T
 
 
-    def inverse_transform(self, KTM, KMM, KXM, X, sigma=1.0, reg=1.0E-12, rcond=None):
+    def inverse_transform(self, KTM, KMM, KXM, X, sigma=1.0, 
+            regularization=1.0E-12, rcond=None):
         """
             Computes the reconstruction of X
 
@@ -314,7 +315,7 @@ class SparseKPCA(object):
                 representative transformed data
             X: the centered original input data
             sigma: regulariztion parameter 
-            reg: additional regularization for the Sparse KRR solution
+            regularization: additional regularization for the Sparse KRR solution
                 for the inverse transform
             rcond: cutoff ratio for small singular values in the least squares
                 solution to determine the inverse transform
@@ -325,7 +326,7 @@ class SparseKPCA(object):
 
         # Build the KRR model and get the weights
         # (can also do LR here)
-        skrr = SparseKRR(sigma=sigma, reg=reg, rcond=rcond)
+        skrr = SparseKRR(sigma=sigma, regularization=regularization, rcond=rcond)
         skrr.fit(KTM, KMM, X)
         W = skrr.W
 
@@ -497,7 +498,7 @@ class IterativeSparseKPCA(object):
             return T
 
     def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1.0, 
-            reg=1.0E-12, reg_type='scalar', rcond=None):
+            regularization=1.0E-12, regularization_type='scalar', rcond=None):
         """
             Initialize the sparse KPCA inverse transform
 
@@ -505,15 +506,15 @@ class IterativeSparseKPCA(object):
             KMM: centered kernel between the transformed representative points
             x_dim: dimension of X data
             sigma: regulariztion parameter 
-            reg: additional regularization for the Sparse KRR solution
+            regularization: additional regularization for the Sparse KRR solution
                 for the inverse transform
             rcond: cutoff ratio for small singular values in the least squares
                 solution to determine the inverse transform
         """
 
         # (can also do LR here)
-        self.iskrr = IterativeSparseKRR(sigma=sigma, reg=reg, 
-                reg_type=reg_type, rcond=rcond)
+        self.iskrr = IterativeSparseKRR(sigma=sigma, regularization=regularization, 
+                regularization_type=regularization_type, rcond=rcond)
         self.iskrr.initialize_fit(KMM, y_dim=x_dim)
 
     def fit_inverse_transform_batch(self, KTM, X):

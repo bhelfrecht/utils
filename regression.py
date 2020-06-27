@@ -16,8 +16,8 @@ class LR(object):
 
         ---Attributes---
         W: regression weights
-        reg: regularization parameter
-        reg_type: type of regularization.
+        regularization: regularization parameter
+        regularization_type: type of regularization.
             Choices are 'scalar' (constant regularization),
             or 'max_eig' (regularization based on maximum eigenvalue)
 
@@ -29,9 +29,10 @@ class LR(object):
         1.  https://en.wikipedia.org/wiki/Linear_regression
     """
 
-    def __init__(self, reg=1.0E-12, reg_type='scalar', rcond=None):
-        self.reg = reg
-        self.reg_type = reg_type
+    def __init__(self, regularization=1.0E-12, 
+            regularization_type='scalar', rcond=None):
+        self.regularization = regularization
+        self.regularization_type = regularization_type
         self.rcond = rcond
         self.W = None
 
@@ -47,15 +48,15 @@ class LR(object):
         XTX = np.matmul(X.T, X)
 
         # Regularize the model
-        if self.reg_type == 'max_eig':
+        if self.regularization_type == 'max_eig':
             scale = np.amax(np.linalg.eigvalsh(XTX))
-        elif self.reg_type == 'scalar':
+        elif self.regularization_type == 'scalar':
             scale = 1.0
         else:
-            print("Error: invalid reg_type. Use 'scalar' or 'max_eig'")
+            print("Error: invalid regularization_type. Use 'scalar' or 'max_eig'")
             return
 
-        XTX += np.eye(XTX.shape[0])*scale*self.reg
+        XTX += np.eye(XTX.shape[0])*scale*self.regularization
         XY = np.matmul(X.T, Y)
 
         # Compute LR solution
@@ -91,8 +92,8 @@ class KRR(object):
         Performs kernel ridge regression
         
         ---Attributes---
-        reg: regularization parameter
-        reg_type: type of regularization.
+        regularization: regularization parameter
+        regularization_type: type of regularization.
             Choices are 'scalar' (constant regularization),
             or 'max_eig' (regularization based on maximum eigenvalue)
         W: regression weights
@@ -108,9 +109,10 @@ class KRR(object):
             Springer, 2018
     """
     
-    def __init__(self, reg=1.0E-12, reg_type='scalar', rcond=None):
-        self.reg = reg
-        self.reg_type = reg_type
+    def __init__(self, regularization=1.0E-12, 
+            regularization_type='scalar', rcond=None):
+        self.regularization = regularization
+        self.regularization_type = regularization_type
         self.rcond = rcond
         self.W = None
         
@@ -124,15 +126,15 @@ class KRR(object):
         """
 
         # Regularize the model
-        if self.reg_type == 'max_eig':
+        if self.regularization_type == 'max_eig':
             scale = np.amax(np.linalg.eigvalsh(K))
-        elif self.reg_type == 'scalar':
+        elif self.regularization_type == 'scalar':
             scale = 1.0
         else:
-            print("Error: invalid reg_type. Use 'scalar' or 'max_eig'")
+            print("Error: invalid regularization_type. Use 'scalar' or 'max_eig'")
             return
 
-        KX = K + np.eye(K.shape[0])*scale*self.reg
+        KX = K + np.eye(K.shape[0])*scale*self.regularization
 
         # Solve the model
         self.W = np.linalg.lstsq(KX, Y, rcond=self.rcond)[0]
@@ -164,8 +166,8 @@ class SparseKRR(object):
         
         ---Attributes---
         sigma: regularization parameter
-        reg: additional regularization
-        reg_type: type of regularization.
+        regularization: additional regularization
+        regularization_type: type of regularization.
             Choices are 'scalar' (constant regularization),
             or 'max_eig' (regularization based on maximum eigenvalue)
         W: regression weights
@@ -184,10 +186,11 @@ class SparseKRR(object):
             Conference on Machine Learning, 911-918, 2000
     """
     
-    def __init__(self, sigma=1.0, reg=1.0E-12, reg_type='scalar', rcond=None):
+    def __init__(self, sigma=1.0, regularization=1.0E-12, 
+            regularization_type='scalar', rcond=None):
         self.sigma = sigma
-        self.reg = reg
-        self.reg_type = reg_type
+        self.regularization = regularization
+        self.regularization_type = regularization_type
         self.rcond = rcond
         self.W = None
         
@@ -205,15 +208,15 @@ class SparseKRR(object):
         KX = self.sigma*KMM + np.matmul(KNM.T, KNM)
     
         # Regularize the sparse kernel model
-        if self.reg_type == 'max_eig':
+        if self.regularization_type == 'max_eig':
             scale = np.amax(np.linalg.eigvalsh(KX))
-        elif self.reg_type == 'scalar':
+        elif self.regularization_type == 'scalar':
             scale = 1.0
         else:
-            print("Error: invalid reg_type. Use 'scalar' or 'max_eig'")
+            print("Error: invalid regularization_type. Use 'scalar' or 'max_eig'")
             return
 
-        KX += np.eye(KMM.shape[0])*scale*self.reg
+        KX += np.eye(KMM.shape[0])*scale*self.regularization
         KY = np.matmul(KNM.T, Y)
 
         # Solve KRR model
@@ -255,8 +258,8 @@ class IterativeSparseKRR(object):
 
         ---Attributes---
         sigma: regularization parameter
-        reg: additional regularization
-        reg_type: type of regularization.
+        regularization: additional regularization
+        regularization_type: type of regularization.
             Choices are 'scalar' (constant regularization),
             or 'max_eig' (regularization based on maximum eigenvalue)
         W: regression weights
@@ -281,10 +284,11 @@ class IterativeSparseKRR(object):
             Conference on Machine Learning, 911-918, 2000
     """
     
-    def __init__(self, sigma=1, reg=1.0E-12, reg_type='scalar', rcond=None):
+    def __init__(self, sigma=1.0, regularization=1.0E-12, 
+            regularization_type='scalar', rcond=None):
         self.sigma = sigma
-        self.reg = reg
-        self.reg_type = reg_type
+        self.regularization = regularization
+        self.regularization_type = regularization_type
         self.rcond = rcond
         self.W = None
         self.KX = None
@@ -348,15 +352,15 @@ class IterativeSparseKRR(object):
         """
 
         # Regularize the model
-        if self.reg_type == 'max_eig':
+        if self.regularization_type == 'max_eig':
             scale = np.amax(np.linalg.eigvalsh(KX))
-        elif self.reg_type == 'scalar':
+        elif self.regularization_type == 'scalar':
             scale = 1.0
         else:
-            print("Error: invalid reg_type. Use 'scalar' or 'max_eig'")
+            print("Error: invalid regularization_type. Use 'scalar' or 'max_eig'")
             return
 
-        self.KX += np.eye(self.KX.shape[0])*scale*self.reg
+        self.KX += np.eye(self.KX.shape[0])*scale*self.regularization
 
         # Solve KRR model
         self.W = np.linalg.lstsq(self.KX, self.KY, rcond=self.rcond)[0]
@@ -387,8 +391,8 @@ class PCovR(object):
         ---Attributes---
         alpha: tuning parameter between PCA and LR
         n_components: number of PCA components to retain
-        reg: regularization parameter
-        reg_type: type of regularization.
+        regularization: regularization parameter
+        regularization_type: type of regularization.
             Choices are 'scalar' (constant regularization),
             or 'max_eig' (regularization based on maximum eigenvalue)
         tiny: cutoff for throwing away small eigenvalues
@@ -421,12 +425,12 @@ class PCovR(object):
 
     """
 
-    def __init__(self, alpha=0.0, n_components=None, reg=1.0E-12, 
-            reg_type='scalar', tiny=1.0E-15, rcond=None):
+    def __init__(self, alpha=0.0, n_components=None, regularization=1.0E-12, 
+            regularization_type='scalar', tiny=1.0E-15, rcond=None):
         self.alpha = alpha
         self.n_components = n_components
-        self.reg = reg
-        self.reg_type = reg_type
+        self.regularization = regularization
+        self.regularization_type = regularization_type
         self.tiny = tiny
         self.rcond = rcond
         self.U = None
@@ -451,7 +455,8 @@ class PCovR(object):
         """
 
         # Compute predicted Y with LR
-        lr = LR(reg=self.reg, reg_type=self.reg_type, rcond=self.rcond)
+        lr = LR(regularization=self.regularization, 
+                regularization_type=self.regularization_type, rcond=self.rcond)
         lr.fit(X, Y)
         Y_hat = lr.transform(X)
         W = lr.W
@@ -691,8 +696,8 @@ class KPCovR(object):
         alpha: tuning parameter between KPCA and KRR
         n_components: number of KPCA components to retain in the latent
             space projection
-        reg: regularization parameter
-        reg_type: type of regularization.
+        regularization: regularization parameter
+        regularization_type: type of regularization.
             Choices are 'scalar' (constant regularization),
             or 'max_eig' (regularization based on maximum eigenvalue)
         tiny: threshold for discarding small eigenvalues
@@ -721,12 +726,12 @@ class KPCovR(object):
 
     """
 
-    def __init__(self, alpha=0.0, n_components=None, reg=1E-12, 
-            reg_type='scalar', tiny=1.0E-15, rcond=None):
+    def __init__(self, alpha=0.0, n_components=None, regularization=1.0E-12, 
+            regularization_type='scalar', tiny=1.0E-15, rcond=None):
         self.alpha = alpha
         self.n_components = n_components
-        self.reg = reg
-        self.reg_type = reg_type
+        self.regularization = regularization
+        self.regularization_type = regularization_type
         self.tiny = tiny
         self.rcond = rcond
         self.U = None
@@ -752,7 +757,8 @@ class KPCovR(object):
         """
 
         # Compute predicted Y with KRR
-        krr = KRR(reg=self.reg, reg_type=self.reg_type, rcond=self.rcond)
+        krr = KRR(regularization=self.regularization, 
+                regularization_type=self.regularization_type, rcond=self.rcond)
         krr.fit(K, Y)
         Y_hat = krr.transform(K)
         W = krr.W
@@ -957,8 +963,8 @@ class SparseKPCovR(object):
         ---Attributes---
         alpha: tuning parameter
         n_components: number of kernel principal components to retain
-        reg: regularization parameter
-        reg_type: type of regularization.
+        regularization: regularization parameter
+        regularization_type: type of regularization.
             Choices are 'scalar' (constant regularization),
             or 'max_eig' (regularization based on maximum eigenvalue)
         tiny: threshold for discarding small eigenvalues
@@ -993,11 +999,12 @@ class SparseKPCovR(object):
     """
 
     def __init__(self, alpha=0.0, n_components=None, sigma=1.0, 
-            reg=1.0E-12, reg_type='scalar', tiny=1.0E-15, rcond=None):
+            regularization=1.0E-12, regularization_type='scalar', 
+            tiny=1.0E-15, rcond=None):
         self.alpha = alpha
         self.n_components = n_components
-        self.reg = reg
-        self.reg_type = reg_type
+        self.regularization = regularization
+        self.regularization_type = regularization_type
         self.sigma = sigma
         self.tiny = tiny
         self.rcond = rcond
@@ -1033,8 +1040,8 @@ class SparseKPCovR(object):
         # NOTE: If centered kernels not used, may need to 
         # do instead LR in the centered feature space (i.e., with phi)
         # and KPCA part is based on phi centering as well anyway
-        skrr = SparseKRR(sigma=self.sigma, reg=self.reg, 
-                reg_type=self.reg_type, rcond=self.rcond)
+        skrr = SparseKRR(sigma=self.sigma, regularization=self.regularization, 
+                regularization_type=self.regularization_type, rcond=self.rcond)
         skrr.fit(KNM, KMM, Y)
         Y_hat = skrr.transform(KNM)
         W = skrr.W
@@ -1295,8 +1302,8 @@ class IterativeSparseKPCovR(object):
         ---Attributes---
         alpha: tuning parameter
         n_components: number of kernel principal components to retain
-        reg: regularization parameter
-        reg_type: type of regularization.
+        regularization: regularization parameter
+        regularization_type: type of regularization.
             Choices are 'scalar' (constant regularization),
             or 'max_eig' (regularization based on maximum eigenvalue)
         tiny: threshold for discarding small eigenvalues
@@ -1335,12 +1342,13 @@ class IterativeSparseKPCovR(object):
         gram_loss: computes the Gram loss
     """
 
-    def __init__(self, alpha=0.0, n_components=None, sigma=1.0, reg=1.0E-12, 
-            reg_type='scalar', tiny=1.0E-15, rcond=None):
+    def __init__(self, alpha=0.0, n_components=None, sigma=1.0, 
+            regularization=1.0E-12, regularization_type='scalar', 
+            tiny=1.0E-15, rcond=None):
         self.alpha = alpha
         self.n_components = n_components
-        self.reg = reg
-        self.reg_type = reg_type
+        self.regularization = regularization
+        self.regularization_type = regularization_type
         self.sigma = sigma
         self.tiny = tiny
         self.rcond = rcond
@@ -1381,8 +1389,10 @@ class IterativeSparseKPCovR(object):
         self.Y_norm = 0
 
         # Initialize the iterative sparse KRR
-        self.iskrr = IterativeSparseKRR(sigma=self.sigma, reg=self.reg, 
-                reg_type=self.reg_type, rcond=self.rcond)
+        self.iskrr = IterativeSparseKRR(sigma=self.sigma, 
+                regularization=self.regularization, 
+                regularization_type=self.regularization_type, 
+                rcond=self.rcond)
 
         self.iskrr.initialize_fit(KMM, y_dim=y_dim)
 
