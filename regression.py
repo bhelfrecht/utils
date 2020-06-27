@@ -386,7 +386,7 @@ class PCovR(object):
 
         ---Attributes---
         alpha: tuning parameter between PCA and LR
-        n_pca: number of PCA components to retain
+        n_components: number of PCA components to retain
         reg: regularization parameter
         reg_type: type of regularization.
             Choices are 'scalar' (constant regularization),
@@ -421,10 +421,10 @@ class PCovR(object):
 
     """
 
-    def __init__(self, alpha=0.0, n_pca=None, reg=1.0E-12, 
+    def __init__(self, alpha=0.0, n_components=None, reg=1.0E-12, 
             reg_type='scalar', tiny=1.0E-15, rcond=None):
         self.alpha = alpha
-        self.n_pca = n_pca
+        self.n_components = n_components
         self.reg = reg
         self.reg_type = reg_type
         self.tiny = tiny
@@ -486,8 +486,8 @@ class PCovR(object):
         self.U, self.V = sorted_eigh(G, tiny=self.tiny)
 
         # Truncate the projections
-        self.V = self.V[:, 0:self.n_pca]
-        self.U = self.U[0:self.n_pca]
+        self.V = self.V[:, 0:self.n_components]
+        self.U = self.U[0:self.n_components]
 
         # Compute projection matrix Pxt
         Pxt_pca = X.T/self.P_scale**2 
@@ -552,8 +552,8 @@ class PCovR(object):
         self.U, self.V = sorted_eigh(S, tiny=self.tiny)
 
         # Truncate the projections
-        self.V = self.V[:, 0:self.n_pca]
-        self.U = self.U[0:self.n_pca]
+        self.V = self.V[:, 0:self.n_components]
+        self.U = self.U[0:self.n_components]
 
         # Compute projection matrix Pxt
         self.Pxt = np.matmul(C_inv_sqrt, self.V)
@@ -689,7 +689,7 @@ class KPCovR(object):
 
         ---Attributes---
         alpha: tuning parameter between KPCA and KRR
-        n_kpca: number of KPCA components to retain in the latent
+        n_components: number of KPCA components to retain in the latent
             space projection
         reg: regularization parameter
         reg_type: type of regularization.
@@ -721,10 +721,10 @@ class KPCovR(object):
 
     """
 
-    def __init__(self, alpha=0.0, n_kpca=None, reg=1E-12, 
+    def __init__(self, alpha=0.0, n_components=None, reg=1E-12, 
             reg_type='scalar', tiny=1.0E-15, rcond=None):
         self.alpha = alpha
-        self.n_kpca = n_kpca
+        self.n_components = n_components
         self.reg = reg
         self.reg_type = reg_type
         self.tiny = tiny
@@ -788,8 +788,8 @@ class KPCovR(object):
         self.U, self.V = sorted_eigh(G, tiny=self.tiny)
 
         # Truncate the projections
-        self.V = self.V[:, 0:self.n_kpca]
-        self.U = self.U[0:self.n_kpca]
+        self.V = self.V[:, 0:self.n_components]
+        self.U = self.U[0:self.n_components]
 
         # Compute projection matrix Pkt
         Pkt_kpca = np.eye(K.shape[0])/self.P_scale**2
@@ -956,7 +956,7 @@ class SparseKPCovR(object):
 
         ---Attributes---
         alpha: tuning parameter
-        n_kpca: number of kernel principal components to retain
+        n_components: number of kernel principal components to retain
         reg: regularization parameter
         reg_type: type of regularization.
             Choices are 'scalar' (constant regularization),
@@ -992,10 +992,10 @@ class SparseKPCovR(object):
         gram_loss: computes the Gram loss
     """
 
-    def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, 
+    def __init__(self, alpha=0.0, n_components=None, sigma=1.0, 
             reg=1.0E-12, reg_type='scalar', tiny=1.0E-15, rcond=None):
         self.alpha = alpha
-        self.n_kpca = n_kpca
+        self.n_components = n_components
         self.reg = reg
         self.reg_type = reg_type
         self.sigma = sigma
@@ -1100,8 +1100,8 @@ class SparseKPCovR(object):
         self.U, self.V = sorted_eigh(S, tiny=self.tiny)
 
         # Truncate the projections
-        self.U = self.U[0:self.n_kpca]
-        self.V = self.V[:, 0:self.n_kpca]
+        self.U = self.U[0:self.n_components]
+        self.V = self.V[:, 0:self.n_components]
 
         # Define some matrices that will be re-used
         P = np.matmul(np.diagflat(1.0/np.sqrt(self.U)), self.V.T)
@@ -1294,7 +1294,7 @@ class IterativeSparseKPCovR(object):
 
         ---Attributes---
         alpha: tuning parameter
-        n_kpca: number of kernel principal components to retain
+        n_components: number of kernel principal components to retain
         reg: regularization parameter
         reg_type: type of regularization.
             Choices are 'scalar' (constant regularization),
@@ -1335,10 +1335,10 @@ class IterativeSparseKPCovR(object):
         gram_loss: computes the Gram loss
     """
 
-    def __init__(self, alpha=0.0, n_kpca=None, sigma=1.0, reg=1.0E-12, 
+    def __init__(self, alpha=0.0, n_components=None, sigma=1.0, reg=1.0E-12, 
             reg_type='scalar', tiny=1.0E-15, rcond=None):
         self.alpha = alpha
-        self.n_kpca = n_kpca
+        self.n_components = n_components
         self.reg = reg
         self.reg_type = reg_type
         self.sigma = sigma
@@ -1454,8 +1454,8 @@ class IterativeSparseKPCovR(object):
         self.U, self.V = sorted_eigh(S, tiny=self.tiny)
 
         # Truncate the projections
-        self.U = self.U[0:self.n_kpca]
-        self.V = self.V[:, 0:self.n_kpca]
+        self.U = self.U[0:self.n_components]
+        self.V = self.V[:, 0:self.n_components]
 
         # Define some matrices that will be re-used
         P = np.matmul(np.diagflat(1.0/np.sqrt(self.U)), self.V.T)

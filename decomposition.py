@@ -7,17 +7,17 @@ from kernels import center_kernel
 from regression import KRR, SparseKRR, IterativeSparseKRR
 from tools import sorted_eigh
 
-# TODO: CHECK IF STANDARDIZATION AFFECTS SCALING
-# IN PCOVR, KPCOVR, AND SPARSE KPCOVR
-
 # TODO: make regression parameters attributes of the object
+# TODO: check proper centering in classes and center if not done
+# TODO: eliminate auxiliary centering of T/phi in sparse methods
+# TODO: make abstract base class with fit, transform
 
 class PCA(object):
     """
         Performs principal component analysis
 
         ---Attributes---
-        n_pca: number of PCA components to retain
+        n_components: number of PCA components to retain
             (`None` retains all components)
         C: covariance matrix of the data
         U: eigenvalues of the covariance matrix
@@ -33,10 +33,10 @@ class PCA(object):
             Advances in Neural Information Processing Systems 13, 633-639, 2001
     """
 
-    def __init__(self, n_pca=None, tiny=1.0E-15):
+    def __init__(self, n_components=None, tiny=1.0E-15):
 
         # Initialize attributes
-        self.n_pca = n_pca
+        self.n_components = n_components
         self.tiny = tiny 
         self.C = None
         self.U = None
@@ -57,8 +57,8 @@ class PCA(object):
         self.U, self.V = sorted_eigh(self.C, tiny=self.tiny)
 
         # Truncate the projections
-        self.U = self.U[0:self.n_pca]
-        self.V = self.V[:, 0:self.n_pca]
+        self.U = self.U[0:self.n_components]
+        self.V = self.V[:, 0:self.n_components]
 
     def transform(self, X):
         """
@@ -107,7 +107,7 @@ class KPCA(object):
         based on a kernel between all of the constituent data points
         
         ---Attributes---
-        n_kpca: number of principal components to retain in the decomposition
+        n_components: number of principal components to retain in the decomposition
         tiny: threshold for discarding small eigenvalues
         U: eigenvalues of the kernel matrix
         V: eigenvectors of the kernel matrix
@@ -122,8 +122,8 @@ class KPCA(object):
             Advances in Neural Information Processing Systems 13, 633-639, 2001  
     """
     
-    def __init__(self, n_kpca=None, tiny=1.0E-15):
-        self.n_kpca = n_kpca
+    def __init__(self, n_components=None, tiny=1.0E-15):
+        self.n_components = n_components
         self.tiny = tiny
         self.U = None
         self.V = None
@@ -140,8 +140,8 @@ class KPCA(object):
         self.U, self.V = sorted_eigh(K, tiny=self.tiny)
 
         # Truncate the projections
-        self.U = self.U[0:self.n_kpca]
-        self.V = self.V[:, 0:self.n_kpca]
+        self.U = self.U[0:self.n_components]
+        self.V = self.V[:, 0:self.n_components]
     
     def transform(self, K):
         """
@@ -204,7 +204,7 @@ class SparseKPCA(object):
         Performs sparsified principal component analysis
         
         ---Attributes---
-        n_kpca: number of principal components to retain
+        n_components: number of principal components to retain
         T_mean: the column means of the approximate feature space
         tiny: threshold for discarding small eigenvalues
         T_mean: auxiliary centering of the kernel matrix
@@ -231,8 +231,8 @@ class SparseKPCA(object):
             on Machine Learning, 1232-1239, 2008
     """
     
-    def __init__(self, n_kpca=None, tiny=1.0E-15):
-        self.n_kpca = n_kpca
+    def __init__(self, n_components=None, tiny=1.0E-15):
+        self.n_components = n_components
         self.tiny = tiny
         self.T_mean = None
         self.Um = None
@@ -350,7 +350,7 @@ class IterativeSparseKPCA(object):
             iskpca.transform(KNMi)
         
         ---Attributes---
-        n_kpca: number of principal components to retain
+        n_components: number of principal components to retain
         T_mean: the column means of the approximate feature space
         n_samples: number of training points
         tiny: threshold for discarding small eigenvalues
@@ -384,8 +384,8 @@ class IterativeSparseKPCA(object):
         5.  https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
     """
     
-    def __init__(self, n_kpca=None, tiny=1.0E-15):
-        self.n_kpca = n_kpca
+    def __init__(self, n_components=None, tiny=1.0E-15):
+        self.n_components = n_components
         self.tiny = tiny
         self.C = None
         self.T_mean = None
@@ -422,7 +422,6 @@ class IterativeSparseKPCA(object):
             ---Arguments---
             KNM: centered kernel between all training points
                 and the representative points
-            KMM: centered kernel between the representative points
         """
 
         if self.Um is None or self.Vm is None:
@@ -439,6 +438,7 @@ class IterativeSparseKPCA(object):
         # we are finished building it
 
         # Compute a KPCA based on the eigendecomposition of KMM
+        # TODO: also scale T?
         T = np.matmul(KNM, self.Vm)
         T = np.matmul(T, np.diagflat(1.0/np.sqrt(self.Um)))
 
@@ -474,8 +474,8 @@ class IterativeSparseKPCA(object):
 
         # Truncate the projections
         # TODO: how to compute and truncate the eigenvalues?
-        self.V = self.V[:, 0:self.n_kpca]
-        self.T_mean = self.T_mean[0:self.n_kpca]
+        self.V = self.V[:, 0:self.n_components]
+        self.T_mean = self.T_mean[0:self.n_components]
 
     def transform(self, KNM):
         """
@@ -495,7 +495,8 @@ class IterativeSparseKPCA(object):
             T = np.matmul(KNM, self.V) - self.T_mean
             return T
 
-    def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1.0, reg=1.0E-12, rcond=None):
+    def initialize_inverse_transform(self, KMM, x_dim=1, sigma=1.0, 
+            reg=1.0E-12, reg_type='scalar', rcond=None):
         """
             Initialize the sparse KPCA inverse transform
 
@@ -510,7 +511,8 @@ class IterativeSparseKPCA(object):
         """
 
         # (can also do LR here)
-        self.iskrr = IterativeSparseKRR(sigma=sigma, reg=reg, rcond=rcond)
+        self.iskrr = IterativeSparseKRR(sigma=sigma, reg=reg, 
+                reg_type=reg_type, rcond=rcond)
         self.iskrr.initialize_fit(KMM, y_dim=x_dim)
 
     def fit_inverse_transform_batch(self, KTM, X):
