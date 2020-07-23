@@ -185,11 +185,17 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
         return soaps
 
 # TODO: make Z optional -- if not given, use all species
+# TODO: pass all SOAP parameters as kwargs? Then need to
+# find a way to reliably write all parameters to the HDF5 attributes
 def librascal_soap(structures, Z, max_radial=6, max_angular=6, 
         interaction_cutoff=3.0, cutoff_smooth_width=0.5,
         gaussian_sigma_constant=0.5, soap_type='PowerSpectrum', 
         cutoff_function_type='ShiftedCosine', gaussian_sigma_type='Constant',
+        radial_basis='GTO', expansion_by_species_method='environment wise',
+        global_species=None, compute_gradients=False,
         inversion_symmetry=True, normalize=True,
+        optimization_args={}, cutoff_function_parameters={},
+        coefficient_subselection=None,
         average=False, component_idxs=None, output=None):
     """
         Compute SOAP vectors with Librascal
@@ -207,8 +213,15 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         cutoff_function_type: type of cutoff function
         gaussian_sigma_type: fixed atomic Gaussian widths ('Constant'),
             vary by species ('PerSpecies'), or vary by distance from the central atom ('Radial')
+        radial_basis: basis to use for the radial part
         inversion_symmetry: enforce inversion variance
         normalize: normalize SOAP vectors
+        compute_gradients: compute gradients of the SOAP vectors
+        expansion_by_species_method: setup of the species
+        global_species: list of species that will obey the species setup
+        cutoff_function_parameters: additional parameters for the cutoff function
+        optimization_args: optimization parameters
+        coefficient_subselection: list of species, n, and l indicies to select
         average: average SOAP vectors over the central atoms in a structure
         component_idxs: indices of SOAP components to retain; discard all other components
         output: output file for hdf5
@@ -219,6 +232,8 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
     """
 
     # Center and wrap the frames
+    # TODO: change this to a deepcopy
+    # as the original objects are modified
     structures_copy = structures.copy()
     for structure in structures_copy:
         structure.center()
@@ -235,7 +250,16 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
             cutoff_smooth_width=cutoff_smooth_width,
             cutoff_function_type=cutoff_function_type,
             gaussian_sigma_constant=gaussian_sigma_constant,
-            gaussian_sigma_type=gaussian_sigma_type)
+            gaussian_sigma_type=gaussian_sigma_type,
+            radial_basis=radial_basis,
+            global_species=global_species,
+            expansion_by_species_method=expansion_by_species_method,
+            normalize=normalize,
+            inversion_symmetry=inversion_symmetry,
+            compute_gradients=compute_gradients,
+            optimization_args=optimization_args,
+            cutoff_function_parameters=cutoff_function_parameters,
+            coefficient_subselection=coefficient_subselection)
 
     # Write SOAP vectors to file
     if output is not None:
@@ -255,6 +279,16 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         h.attrs['cutoff_function_type'] = cutoff_function_type
         h.attrs['gaussian_sigma_constant'] = gaussian_sigma_constant
         h.attrs['gaussian_sigma_type'] = gaussian_sigma_type
+        # TODO: make these saveable to the HDF5
+        #h.attrs['radial_basis'] = radial_basis
+        #h.attrs['global_species'] = global_species
+        #h.attrs['expansion_by_species_method'] = expansion_by_species_method
+        #h.attrs['inversion_symmetry'] = inversion_symmetry
+        #h.attrs['normalize'] = normalize
+        #h.attrs['compute_gradients'] = compute_gradients
+        #h.attrs['optimization_args'] = optimization_args
+        #h.attrs['cutoff_function_parameters'] = cutoff_function_parameters
+        #h.attrs['coefficient_subselection'] = coefficient_subselection
         h.attrs['average'] = average
         if component_idxs is not None:
             h.attrs['component_idxs'] = component_idxs
