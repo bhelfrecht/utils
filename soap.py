@@ -3,6 +3,8 @@
 import os
 import sys
 import numpy as np
+from scipy.linalg import fractional_matrix_power
+from scipy.special import gamma, eval_legendre
 from quippy.descriptors import Descriptor
 import h5py
 from tqdm import tqdm
@@ -324,3 +326,191 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
             soaps.append(soap)
 
         return soaps
+
+def gto_sigma(cutoff, n, n_max):
+    """
+        Compute GTO sigma
+
+        ---Arguments---
+        cutoff: environment cutoff
+        n: order of the GTO
+        n_max: maximum order of the GTO
+
+        ---Returns---
+        sigma: GTO sigma parameter
+    """
+    return np.maximum(np.sqrt(n), 1) * cutoff / n_max
+
+def gto_width(sigma):
+    """
+        Compute GTO width
+
+        ---Arguments---
+        sigma: GTO sigma parameter
+
+        ---Returns---
+        b: GTO (Gaussian) width
+    """
+    return 1.0 / (2 * sigma ** 2)
+
+def gto_prefactor(n, sigma):
+    """
+        Compute GTO prefactor
+
+        ---Arguments---
+        n: order of the GTO
+        sigma: GTO sigma parameter
+
+        ---Returns---
+        N: GTO prefactor (normalization factor)
+    """
+    return np.sqrt(2 / (sigma ** (2 * n + 3) * gamma(n + 1.5)))
+
+def gto(r, n, sigma):
+    """
+        Compute GTO
+
+        ---Arguments---
+        r: grid on which to evaluate the GTO
+        n: order of the GTO
+        sigma: GTO sigma parameter
+
+        ---Returns---
+        R_n: GTO of order n evaluated on the provided grid
+    """
+    b = gto_width(sigma)
+    N = gto_prefactor(n, sigma)
+    return N * r ** (n + 1) * np.exp(-b * r ** 2) # why n+1?
+
+def gto_overlap(n, m, sigma_n, sigma_m):
+    """
+        Compute overlap of two GTOs
+
+        ---Arguments---
+        n: order of the first GTO
+        m: order of the second GTO
+        sigma_n: sigma parameter of the first GTO
+        sigma_m: sigma parameter of the second GTO
+
+        ---Returns---
+        S: overlap of the two GTOs
+    """
+    b_n = gto_width(sigma_n)
+    b_m = gto_width(sigma_m)
+    N_n = gto_prefactor(n, sigma_n)
+    N_m = gto_prefactor(m, sigma_m)
+    nm = 0.5 * (3 + n + m)
+    return 0.5 * N_n * N_m * (b_n + b_m) ** (-nm) * gamma(nm) # why 0.5?
+
+def legendre_polynomials(l, x):
+    """
+        Evaluate Legendre Polynomials
+
+        ---Arguments---
+        l: order of the Legendre polynomial
+        x: grid on which to compute the legendre polynomials,
+            must be on [-1, 1]
+
+        ---Returns---
+        P_l: Legendre polynomial of order l computed on the provided grid
+    """
+    return eval_legendre(l, x)
+
+def reshape_soaps(soaps, n_pairs, n_max, l_max):
+    """
+        Reshape a SOAP vector to have the shape
+        (n_centers, n_species_pairs, n_max, n_max, l_max+1)
+
+        ---Arguments---
+        soaps: soap vectors to reshape, size (n_centers, n_features).
+            n_features must equal n_pairs * n_max ** 2 * (l_max + 1)
+        n_pairs: number of unique pairings of the species
+            used to build the SOAP vector
+        n_max: maximum order of the radial GTO
+        l_max: maximum order of the angular Legendre polynomials
+
+        ---Returns---
+        soap: reshaped SOAP with shape (n_centers, n_max, n_max, l_max+1)
+    """
+    if soaps.ndim == 1:
+        return np.reshape(soaps, (1, n_pairs, n_max, n_max, l_max+1))
+    else:
+        return np.reshape(soaps, (soaps.shape[0], n_pairs, n_max, n_max, l_max+1))
+
+def compute_soap_density(n_max, l_max, cutoff, soaps, 
+                         r_grid, p_grid, chunk_size_r=0, chunk_size_p=0):
+    """
+        Compute SOAP density
+
+        ---Arguments---
+        n_max: maximum order of the radial GTO
+        l_max: maximum order of the Legendre polynomials
+        cutoff: environment cutoff
+        soaps: soap vectors on which to compute the density,
+            must have the shape (n_centers, n_pairs, n_max, n_max, l_max+1),
+            where n_pairs is the number of unique species pairings
+            (see reshape_soaps)
+        r_grid: grid on which to compute the GTOs
+        p_grid: grid on which to compute the Legendre polynomials
+        chunk_size_r: if > 0, compute density in GTO-grid-based chunks
+        chunk_size_p: if > 0, compute density in Legendre-polynomial-based chunks
+
+        ---Returns---
+        density: SOAP reconstructed density with shape
+            (n_centers, n_pairs, len(r_grid), len(r_grid), len(p_grid)
+    """
+    
+    # Setup grids of the expansion orders
+    n_grid = np.arange(0, n_max)
+    l_grid = np.arange(0, l_max + 1)
+    sigma_grid = gto_sigma(cutoff, n_grid, n_max)
+    
+    # Compute radial normalization factor based on the GTO overlap
+    S = gto_overlap(n_grid[:, np.newaxis],
+                    n_grid[np.newaxis, :],
+                    sigma_grid[:, np.newaxis],
+                    sigma_grid[np.newaxis, :])
+    S = fractional_matrix_power(S, -0.5)
+    
+    # Compute GTOs, shape (n_max, len(r_grid))
+    R_n = np.matmul(S, gto(r_grid[np.newaxis, :],
+                           n_grid[:, np.newaxis],
+                           sigma_grid[:, np.newaxis]))
+    
+    # Compute Legendre polynomials, shape (l_max+1, len(p_grid))
+    P_l = legendre_polynomials(l_grid[:, np.newaxis],
+                               p_grid[np.newaxis, :])
+    
+    # Set up the grid-based chunking to speed
+    # up the density computation and reduce memory requirements
+    if chunk_size_r <= 0:
+        n_chunks_r = 1
+    else:
+        n_chunks_r = len(r_grid) // chunk_size_r
+        if len(r_grid) % chunk_size_r > 0:
+            n_chunks_r += 1
+    
+    if chunk_size_p <= 0:
+        n_chunks_p = 1
+    else:
+        n_chunks_p = len(p_grid) // chunk_size_p
+        if len(p_grid) % chunk_size_p > 0:
+            n_chunks_p += 1
+            
+    # Compute the density in grid-based chunks
+    density = np.zeros((soaps.shape[0], soaps.shape[1], 
+                        len(r_grid), len(r_grid), len(p_grid)))
+        
+    for n in range(0, n_chunks_r):
+        for m in range(0, n_chunks_r):
+            for p in range(0, n_chunks_p):
+                slice_n = slice(n * chunk_size_r, (n + 1) * chunk_size_r, 1)
+                slice_m = slice(m * chunk_size_r, (m + 1) * chunk_size_r, 1)
+                slice_p = slice(p * chunk_size_r, (p + 1) * chunk_size_p, 1)
+                r_n = np.reshape(R_n[:, slice_n], (n_max, 1, 1, -1, 1, 1))
+                r_m = np.reshape(R_n[:, slice_m], (1, n_max, 1, 1, -1, 1))
+                p_l = np.reshape(P_l[:, slice_p], (1, 1, l_max + 1, 1, 1, -1))
+                density[:, :, slice_n, slice_m, slice_p] = np.tensordot(soaps, r_n * r_m * p_l, axes=3)
+                
+    return density
+
