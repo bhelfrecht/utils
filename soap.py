@@ -10,6 +10,7 @@ import h5py
 from tqdm import tqdm
 from rascal.representations import SphericalInvariants
 from rascal.neighbourlist.structure_manager import mask_center_atoms_by_species
+import itertools
 
 # TODO: multiprocessing on computing soaps and writing
 # TODO: decide one or multiple hdf5 files, take multiprocessing
@@ -214,7 +215,8 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         soap_type: type of representation
         cutoff_function_type: type of cutoff function
         gaussian_sigma_type: fixed atomic Gaussian widths ('Constant'),
-            vary by species ('PerSpecies'), or vary by distance from the central atom ('Radial')
+            vary by species ('PerSpecies'), 
+            or vary by distance from the central atom ('Radial')
         radial_basis: basis to use for the radial part
         inversion_symmetry: enforce inversion variance
         normalize: normalize SOAP vectors
@@ -225,7 +227,8 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         optimization_args: optimization parameters
         coefficient_subselection: list of species, n, and l indicies to select
         average: average SOAP vectors over the central atoms in a structure
-        component_idxs: indices of SOAP components to retain; discard all other components
+        component_idxs: indices of SOAP components to retain; 
+            discard all other components
         output: output file for hdf5
 
         ---Returns---
@@ -510,7 +513,171 @@ def compute_soap_density(n_max, l_max, cutoff, soaps,
                 r_n = np.reshape(R_n[:, slice_n], (n_max, 1, 1, -1, 1, 1))
                 r_m = np.reshape(R_n[:, slice_m], (1, n_max, 1, 1, -1, 1))
                 p_l = np.reshape(P_l[:, slice_p], (1, 1, l_max + 1, 1, 1, -1))
-                density[:, :, slice_n, slice_m, slice_p] = np.tensordot(soaps, r_n * r_m * p_l, axes=3)
+                density[:, :, slice_n, slice_m, slice_p] = \
+                        np.tensordot(soaps, r_n * r_m * p_l, axes=3)
                 
     return density
+
+def rrw_neighbors(frame, center_species, env_species, cutoff, self_interaction=False):
+    """
+        Compute the neighbor list for every atom of the central atom species
+        and generate the r, r', w for each pair of neighbors
+
+        ---Arguments---
+        frame: atomic structure
+        center_species: species of atoms to use as centers
+        env_species: species of atoms to include in the environment
+        cutoff: atomic environment cutoff
+        self_interaction: include the central atom as its own neighbor
+
+        ---Returns---
+        rrw: list of a list of numpy 3D numpy arrays.
+            Each numpy array is of shape (3, n_neighbors_a, n_neighbors_b),
+            where the axes are organized as follows:
+            axis=0: distances to neighbor A from the central atom
+            axis=1: distances to neighbor B from the central atom
+            axis=2: angle between the distance vectors to neighbors A and B 
+            from the central atom
+        idxs: same structure as rrw, but holds the indices of the atoms involved 
+            in the tuple, i.e.,
+            axis=0: index of central atom
+            axis=1: index of neighbor A
+            axis=2: index of neighbor B
+    """
+
+    # Extract indices of central atoms and environment atoms
+    center_species_idxs = [np.nonzero(frame.numbers == i)[0] for i in center_species]
+    env_species_idxs = [np.nonzero(frame.numbers == i)[0] for i in env_species]
+
+    # Build neighbor list for all atoms
+    nl = {}
+    nl['i'], nl['j'], nl['d'], nl['D'] = \
+            neighbor_list('ijdD', frame, cutoff, self_interaction=self_interaction)
+
+    rrw = []
+    idxs = []
+
+    # Loop over centers grouped by species
+    for center_idxs in center_species_idxs:
+        for center in center_idxs:
+
+            # Build subset of neighbor list that just has the neighbors of
+            # the center
+            center_nl_idxs = np.nonzero(nl['i'] == center)[0]
+            nl_center = {}
+            for k, v in nl.items():
+                nl_center[k] = v[center_nl_idxs]
+
+            rrw_species = []
+            idxs_species = []
+
+            # Loop over combinations of environment species
+            for env_species_a, env_species_b in \
+                    itertools.combinations_with_replacement(env_species_idxs, 2):
+                a = np.nonzero(np.isin(nl_center['j'], env_species_a))[0]
+                b = np.nonzero(np.isin(nl_center['j'], env_species_b))[0]
+
+                # Extract distances to neighbors from the central atom (r, r')
+                da = nl_center['d'][a]
+                db = nl_center['d'][b]
+                Da = nl_center['D'][a]
+                Db = nl_center['D'][b]
+                r_n, r_m = np.meshgrid(da, db, indexing='ij')
+
+                # Compute angles between neighbors and central atom (w)
+                D = np.matmul(Da, Db.T)
+                d = np.outer(da, db)
+                d[d <= 0.0] = 1.0
+                w = D / d
+
+                # Extract indices of the atoms in the rr'w triplet
+                ia = nl_center['j'][a]
+                ib = nl_center['j'][b]
+                j_n, j_m = np.meshgrid(ia, ib, indexing='ij')
+                j_center = np.full(j_n.shape, center, dtype=int)
+
+                # Build 3D matrix of rr'w triplets
+                rrw_species.append(np.stack((r_n, r_m, w)))
+                idxs_species.append(np.stack((j_center, j_n, j_m)))
+
+            rrw.append(rrw_species)
+            idxs.append(idxs_species)
+
+    return rrw, idxs
+
+def make_tuples(data):
+    """
+        Take a list of lists of rr'w formatted 3D arrays (see rrw_neighbors)
+        and reshape into a list of lists of 2D arrays of shape (n_neighbor_pairs, 3),
+        where each row is a rr'w triplet and the columns are in the order r, r', w
+
+        ---Arguments---
+        data: list of lists of arrays to "reshape"
+
+        ---Returns---
+        center_tuple: "reshaped" data list
+    """
+    n_centers = len(data)
+    center_tuple = []
+
+    # Loop over centers
+    for nctr in range(0, n_centers):
+        n_pairs = len(data[nctr])
+        pair_tuple = []
+
+        # Loop over species pairs
+        for npr in range(0, n_pairs):
+            data_shape = np.shape(data[nctr][npr])
+
+            # Reshape the 3D array to a 2D array
+            tuple_array = np.reshape(np.moveaxis(data[nctr][npr], 0, -1),
+                                     (np.prod(data_shape[1:]), data_shape[0]))
+
+            pair_tuple.append(tuple_array)
+
+        center_tuple.append(pair_tuple)
+
+    return center_tuple
+
+def extract_species_pair_groups(n_features, n_species):
+    """
+        Extract the librascal SOAP feature indices grouped according
+        to species pairing
+
+        ---Arguments---
+        n_features: number of features of the SOAP vector
+        n_species: number of species (in the environment) of the SOAP vector
+
+        ---Returns---
+        feature_groups: list of arrays of indices corresponding to the
+            species groupings
+    """
+
+    n_species_pairs = n_species * (n_species + 1) / 2
+    
+    if n_features % n_species_pairs != 0:
+        print("Error: number of features incompatible with number of species")
+        return
+
+    feature_idxs = np.arange(0, n_features, dtype=int)
+    feature_groups = np.split(feature_idxs, n_species_pairs)
+
+    return feature_groups
+
+def species_pairings(species_list):
+    """
+        Get a list of species pairings. The order of the pairings
+        will correspond to the feature groups from `extract_species_pair_groups`,
+        as librascal sorts the pairings by atomic number
+
+        ---Arguments---
+        species_list: list of atomic numbers
+
+        ---Returns---
+        species_pairings: list of tuples of atomic numbers,
+            with each tuple containing the atomic numbers in the pairing
+    """
+
+    sorted_species = sorted(species_list)
+    return list(itertools.combinations_with_replacement(sorted_species, 2))
 
