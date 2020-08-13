@@ -2,6 +2,7 @@
 
 import os
 import sys
+import gzip
 import numpy as np
 from scipy.sparse.linalg import svds
 from scipy.sparse.linalg import eigsh
@@ -105,3 +106,70 @@ def sorted_eigh(X, k=None, tiny=None):
         U = U[U > tiny]
 
     return U, V
+
+def save_model(model_instance, output):
+    """
+        JSONify an object through its __dict__ attribute
+
+        ---Arguments---
+        model_instance: model to save
+        output: output file
+    """
+
+    model_dict = model_instance.__dict__.copy()
+
+    # Convert arrays to lists
+    for k, v in model_dict.items():
+        if isinstance(v, np.ndarray):
+            kpcovr_dict[k] = v.tolist()
+    
+    # Save
+    with open(output, 'w') as f:
+        json.dump(model_dict, f)
+
+def load_model(model_instance, input_file):
+    """
+        Load a JSONified object
+
+        ---Arguments---
+        model_instance: class instance in which
+            to load the JSONified object
+        input_file: JSON file containing the
+            __dict__ for the class instance
+
+        ---Returns---
+        model_instance: loaded object instance
+    """
+
+    with open(input_file, 'r') as f:
+        model_dict = json.load(f)
+
+    # Turn lists into arrays
+    for k, v in model_dict.items():
+        if isinstance(v, list):
+            model_dict[k] = np.array(v)
+    
+    model_instance.__dict__ = model_dict
+    
+    return model_instance
+
+def load_json(json_file):
+    """
+        Shorthand for loading a JSON file
+
+        ---Arguments---
+        json_file: JSON file to load
+
+        ---Returns---
+        json_object: object read from the JSON file
+    """
+
+    if json_file.endswith('.gz'):
+        with gzip.GzipFile(json_file, 'r') as f:
+            json_object = json.load(f)
+    else:
+        with open(json_file, 'r') as f:
+            json_object = json.load(f)
+
+    return json_object
+
