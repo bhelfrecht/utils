@@ -188,6 +188,18 @@ def build_kernel(XA, XB, XR=None, kernel='linear', gamma=1.0, zeta=1.0):
         kernel_func = linear_kernel
         kw = {'zeta': zeta}
 
+        # If we have a linear kernel of structures,
+        # take the mean over the environments to speed things up,
+        # since we can avoid the looping decorator over XA/XB/XR
+        if isinstance(XA, list):
+            XA = np.vstack([np.mean(xa, axis=0) for xa in XA])
+
+        if isinstance(XB, list):
+            XB = np.vstack([np.mean(xb, axis=0) for xb in XB])
+
+        if isinstance(XR, list):
+            XR = np.vstack([np.mean(xr, axis=0) for xr in XR])
+
     # Initialize kernel matrices
     KRR = None
     KAR = None
@@ -199,7 +211,7 @@ def build_kernel(XA, XB, XR=None, kernel='linear', gamma=1.0, zeta=1.0):
     # where each element of a list represents a structure
     # as an array with the feature vectors of the environments
     # present in that structure as rows
-    
+
     # Nystrom mode
     if XR is not None:
         
@@ -572,7 +584,8 @@ def center_kernel_oos(K, K_bridge, K_ref):
     else:
         one_MN = np.ones((K.shape[0], K_ref.shape[0])) / K_ref.shape[0]
         one_NM = np.ones((K_ref.shape[0], K.shape[0])) / K_ref.shape[0]
-        Kc = K - np.matmul(K_bridge, one_NM) - np.matmul(one_MN, K_bridge.T) + np.matmul(np.matmul(one_MN, K_ref), one_NM)
+        Kc = K - np.matmul(K_bridge, one_NM) - np.matmul(one_MN, K_bridge.T) + \
+                np.matmul(np.matmul(one_MN, K_ref), one_NM)
 
         return Kc
 
