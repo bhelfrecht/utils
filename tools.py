@@ -3,6 +3,7 @@
 import os
 import sys
 import gzip
+import json
 import numpy as np
 from scipy.sparse.linalg import svds
 from scipy.sparse.linalg import eigsh
@@ -172,4 +173,43 @@ def load_json(json_file):
             json_object = json.load(f)
 
     return json_object
+
+def save_json(json_object, output):
+    """
+        JSONify an object
+
+        ---Arguments---
+        json_object: container to save
+        output: output file
+    """
+    if output.endswith('.gz'):
+        with gzip.GzipFile(output, 'w') as f:
+            json.dump(json_object, f)
+    else:
+        with open(output, 'w') as f:
+            json.dump(json_object, f)
+
+def save_structured_array(output, array, dtype):
+    """
+        Save a structured (2D) numpy array in plaintext
+
+        ---Arguments---
+        output: output file
+        array: structured array to save
+        dtype: numpy dtype of the structured array
+    """
+
+    columns = []
+    header = []
+    for name in dtype.names:
+        column = array[name]
+        if column.ndim == 1:
+            column = np.reshape(column, (-1, 1))
+            header.append(name)
+        else:
+            n_cols = column.shape[1]
+            header.append(f'{name}({n_cols})')
+        columns.append(column)
+    header = ' '.join(header)
+    np.savetxt(f'{output}', np.hstack(columns), header=header)
 
