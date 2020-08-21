@@ -639,7 +639,7 @@ def make_tuples(data):
 
     return center_tuple
 
-def extract_species_pair_groups(n_features, n_species):
+def extract_species_pair_groups(n_features, n_species, combinations=False):
     """
         Extract the librascal SOAP feature indices grouped according
         to species pairing
@@ -647,6 +647,8 @@ def extract_species_pair_groups(n_features, n_species):
         ---Arguments---
         n_features: number of features of the SOAP vector
         n_species: number of species (in the environment) of the SOAP vector
+        combinations: whether to also include combinations of species pairs
+            in the feature index groups
 
         ---Returns---
         feature_groups: list of arrays of indices corresponding to the
@@ -661,6 +663,14 @@ def extract_species_pair_groups(n_features, n_species):
 
     feature_idxs = np.arange(0, n_features, dtype=int)
     feature_groups = np.split(feature_idxs, n_species_pairs)
+
+    if combinations:
+        feature_groups_combinations = []
+        for i in range(2, len(feature_groups) + 1):
+            for j in itertools.combinations(feature_groups, i):
+                feature_groups_combinations.append(np.sort(np.concatenate(j)))
+
+        feature_groups.extend(feature_groups_combinations)
 
     return feature_groups
 
