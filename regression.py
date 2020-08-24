@@ -9,6 +9,7 @@ from tools import sorted_eigh
 # TODO: CovR scaling consistent with paper? Should probably include auto-scaling and auto-centering, so make different scale types an option, and make sure sparse is done correctly. Also try per-property Y (and X) scaling, which will propagate to the loss functions 
 # TODO: check loss functions
 # TODO: make abstract base class with fit, transform, losses
+# TODO: clean up the inverse_transform functions
 
 class LR(object):
     """
@@ -23,7 +24,7 @@ class LR(object):
 
         ---Methods---
         fit: fit the linear regression model by computing regression weights
-        transform: compute predicted Y values
+        predict: compute predicted Y values
 
         ---References---
         1.  https://en.wikipedia.org/wiki/Linear_regression
@@ -67,7 +68,7 @@ class LR(object):
         # and for consistency with the kernel methods
         #self.W = np.linalg.lstsq(X, Y, rcond=self.rcond)[0]
 
-    def transform(self, X):
+    def predict(self, X):
         """
             Computes predicted Y values
 
@@ -100,7 +101,7 @@ class KRR(object):
         
         ---Methods---
         fit: fit the KRR model by computing regression weights
-        transform: compute predicted Y values
+        predict: compute predicted Y values
 
         ---References---
         1.  M. Ceriotti, M. J. Willatt, G. Csanyi,
@@ -139,7 +140,7 @@ class KRR(object):
         # Solve the model
         self.W = np.linalg.lstsq(KX, Y, rcond=self.rcond)[0]
         
-    def transform(self, K):
+    def predict(self, K):
         """
             Computes predicted Y values
 
@@ -174,7 +175,7 @@ class SparseKRR(object):
         
         ---Methods---
         fit: fit the sparse KRR model by computing regression weights
-        transform: compute predicted Y values
+        predict: compute predicted Y values
         
         ---References---
         1.  M. Ceriotti, M. J. Willatt, G. Csanyi,
@@ -222,7 +223,7 @@ class SparseKRR(object):
         # Solve KRR model
         self.W = np.linalg.lstsq(KX, KY, rcond=self.rcond)[0]
         
-    def transform(self, KNM):
+    def predict(self, KNM):
         """
             Computes predicted Y values
 
@@ -254,7 +255,7 @@ class IterativeSparseKRR(object):
         iskrr.finalize_fit()
         for i in batches:
             KNMi = build_kernel(Xi, Xm)
-            iskrr.transform(KNMi)
+            iskrr.predict(KNMi)
 
         ---Attributes---
         sigma: regularization parameter
@@ -272,7 +273,7 @@ class IterativeSparseKRR(object):
         fit_batch: fit a batch of training data
         finalize_fit: finalize the KRR fitting
             (i.e., compute regression weights)
-        transform: compute predicted Y values
+        predict: compute predicted Y values
         
         ---References---
         1.  M. Ceriotti, M. J. Willatt, G. Csanyi,
@@ -365,7 +366,7 @@ class IterativeSparseKRR(object):
         # Solve KRR model
         self.W = np.linalg.lstsq(self.KX, self.KY, rcond=self.rcond)[0]
         
-    def transform(self, KNM):
+    def predict(self, KNM):
         """
             Computes predicted Y values
 
@@ -406,11 +407,14 @@ class PCovR(object):
 
         ---Methods---
         _YW: computes the LR predicted Y and weights
-        fit_structure_space: fits the PCovR model for features > samples
-        fit_feature_space: fits the PCovR model for samples > features
-        transform_X: computes the projected X
-        inverse_transform_X: computes the reconstructed X
-        transform_Y: computes the projected Y
+        _fit_structure_space: fits the PCovR model for features > samples
+        _fit_feature_space: fits the PCovR model for samples > features
+        fit: fits the PCovR model and automatically chooses
+            feature space or structure space based on the relative
+            number of samples and features
+        transform: computes the projected X
+        inverse_transform: computes the reconstructed X
+        predict: computes the projected Y
         regression_loss: computes the linear regression loss
         projection_loss: computes the projection loss
         gram_loss: computes the Gram loss
@@ -458,12 +462,12 @@ class PCovR(object):
         lr = LR(regularization=self.regularization, 
                 regularization_type=self.regularization_type, rcond=self.rcond)
         lr.fit(X, Y)
-        Y_hat = lr.transform(X)
+        Y_hat = lr.predict(X)
         W = lr.W
 
         return Y_hat, W
 
-    def fit_structure_space(self, X, Y):
+    def _fit_structure_space(self, X, Y):
         """
             Fit the PCovR model for features > samples
 
@@ -513,7 +517,7 @@ class PCovR(object):
         self.Ptx = np.matmul(P, X)
         self.Ptx /= self.P_scale
 
-    def fit_feature_space(self, X, Y):
+    def _fit_feature_space(self, X, Y):
         """
             Fit the PCovR model for samples > features 
 
@@ -577,7 +581,23 @@ class PCovR(object):
         self.Ptx = np.matmul(P, C_sqrt)
         self.Ptx /= self.P_scale
 
-    def transform_X(self, X):
+    def fit(self, X, Y):
+        """
+            Fit the PCovR model and automatically select
+            feature or structure space based on
+            the relative number of samples and features
+
+            ---Arguments---
+            X: centered independent (predictor) variable data
+            Y: centered dependent (response) variable data
+        """
+
+        if X.shape[0] > X.shape[1]:
+            self._fit_feature_space(X, Y)
+        else:
+            self._fit_structure_space(X, Y)
+
+    def transform(self, X):
         """
             Compute the projection of X
 
@@ -595,7 +615,7 @@ class PCovR(object):
             
             return T
 
-    def inverse_transform_X(self, X):
+    def inverse_transform(self, X):
         """
             Compute the reconstruction of X
 
@@ -609,12 +629,12 @@ class PCovR(object):
         if self.Ptx is None:
             print("Error: must fit the PCovR model before transforming")
         else:
-            T = self.transform_X(X)
+            T = self.transform(X)
             Xr = np.matmul(T, self.Ptx)
 
             return Xr
 
-    def transform_Y(self, X):
+    def predict(self, X):
         """
             Compute the projection (prediction) of Y
 
@@ -630,7 +650,7 @@ class PCovR(object):
         else:
 
             # Compute predicted Y
-            T = self.transform_X(X)
+            T = self.transform(X)
             Yp = np.matmul(T, self.Pty)
 
             return Yp
@@ -648,7 +668,7 @@ class PCovR(object):
         """
 
         # Compute loss
-        Yp = self.transform_Y(X)
+        Yp = self.predict(X)
         regression_loss = np.linalg.norm(Y - Yp)**2/self.Y_norm**2
 
         return regression_loss
@@ -665,7 +685,7 @@ class PCovR(object):
         """
 
         # Compute loss
-        Xr = self.inverse_transform_X(X)
+        Xr = self.inverse_transform(X)
         projection_loss = np.linalg.norm(X - Xr)**2/self.P_scale**2
 
         return projection_loss
@@ -682,7 +702,7 @@ class PCovR(object):
         """
 
         # Compute loss
-        T = self.transform_X(X)
+        T = self.transform(X)
         gram_loss = np.linalg.norm(np.matmul(X, X.T) \
                 - np.matmul(T, T.T))**2 / self.P_scale**4
 
@@ -715,11 +735,10 @@ class KPCovR(object):
         ---Methods---
         _YW: computes the KRR prediction of Y and weights
         fit: fits the KPCovR model
-        transform_K: transforms the kernel data into the latent space
-        inverse_transform_K: computes the reconstructed kernel
-        inverse_transform_X: computes the reconstructed original data
-            (if provided during the fit)
-        transform_Y: yields predicted Y values based on KRR
+        transform: transforms the kernel data into the latent space
+        inverse_transform: computes the reconstructed 
+            kernel or the original X data (if provided during the fit)
+        predict: yields predicted Y values based on KRR
         regression_loss: compute the kernel ridge regression loss
         projection_loss: compute the projection loss
         gram_loss: compute the Gram loss
@@ -760,7 +779,7 @@ class KPCovR(object):
         krr = KRR(regularization=self.regularization, 
                 regularization_type=self.regularization_type, rcond=self.rcond)
         krr.fit(K, Y)
-        Y_hat = krr.transform(K)
+        Y_hat = krr.predict(K)
         W = krr.W
 
         return Y_hat, W
@@ -821,7 +840,7 @@ class KPCovR(object):
             self.Ptx = np.matmul(P, X)
             self.Ptx /= self.P_scale
 
-    def transform_K(self, K):
+    def transform(self, K):
         """
             Transform the data into KPCA space
 
@@ -839,46 +858,43 @@ class KPCovR(object):
 
             return T
 
-    def inverse_transform_K(self, K):
+    def inverse_transform(self, K, mode='K'):
         """
             Compute the reconstruction of the kernel
 
             ---Arguments---
             K: centered kernel matrix
+            mode: whether to do a reconstruction of the kernel ('K')
+                or a reconstruction of X ('X')
 
             ---Returns---
-            Kr: the centered reconstructed kernel
+            R: the centered reconstructed quantity
         """
 
-        if self.Ptk is None:
-            print("Error: must fit the PCovR model before transforming")
+        if mode == 'K':
+            if self.Ptk is None:
+                print("Error: must fit the PCovR model before transforming")
+                return
+            else:
+                T = self.transform(K) 
+                R = np.matmul(T, self.Ptk)
+
+        elif mode == 'X':
+            if self.Ptx is None:
+                print("Error: must provide X data during the PCovR fit "
+                        "before transforming")
+                return
+            else:
+                T = self.transform(K)
+                R = np.matmul(T, self.Ptx)
         else:
-            T = self.transform_K(K) 
-            Kr = np.matmul(T, self.Ptk)
+            print("Error: invalid transformation mode; "
+                    "use 'K' or 'X'")
+            return
 
-            return Kr
+        return R
 
-    def inverse_transform_X(self, K):
-        """
-            Compute the reconstruction of the original X data
-
-            ---Arguments---
-            K: centered kernel matrix
-
-            ---Returns---
-            Xr: centered reconstructed X data
-        """
-
-        if self.Ptx is None:
-            print("Error: must provide X data during the PCovR fit "
-                    "before transforming")
-        else:
-            T = self.transform_K(K)
-            Xr = np.matmul(T, self.Ptx)
-
-            return Xr
-
-    def transform_Y(self, K):
+    def predict(self, K):
         """
             Compute the predicted Y values
 
@@ -894,7 +910,7 @@ class KPCovR(object):
         else:
 
             # Compute predicted Y
-            T = self.transform_K(K)
+            T = self.transform(K)
             Yp = np.matmul(T, self.Pty)
 
             return Yp
@@ -912,7 +928,7 @@ class KPCovR(object):
         """
 
         # Compute loss
-        Yp = self.transform_Y(K)
+        Yp = self.predict(K)
         regression_loss = np.linalg.norm(Y - Yp)**2/self.Y_norm**2
 
         return regression_loss
@@ -930,10 +946,14 @@ class KPCovR(object):
 
         # TODO: special formulation
         # Compute loss
+        T = self.transform(K)
         if K_bridge is not None and K_ref is not None:
-            pass
+            T_ref = self.transform(K_ref)
+
+
         else:
-            pass
+            projection_loss = np.trace(K - np.matmul(T, self.PTK)) \
+                    / self.P_scale**2
 
         projection_loss = None
 
@@ -951,7 +971,7 @@ class KPCovR(object):
         """
 
         # Compute loss
-        T = self.transform_K(K)
+        T = self.transform(K)
         gram_loss = np.linalg.norm(K - np.matmul(T, T.T))**2 / self.P_scale**4
 
         return gram_loss
@@ -988,11 +1008,10 @@ class SparseKPCovR(object):
 
         ---Methods---
         fit: fit the sparse KPCovR model
-        transform_K: transform the data into KPCA space
-        inverse_transform_K: computes the reconstructedkernel matrix
-        inverse_transform_X: computes the reconstructed original input data
-            (if provided during the fit)
-        transform_Y: computes predicted Y values
+        transform: transform the data into KPCA space
+        inverse_transform: computes the reconstructed kernel
+            or the original X data (if provided during the fit)
+        predict: computes predicted Y values
         regression_loss: computes the sparse kernel ridge regression loss
         projection_loss: computes the projection loss
         gram_loss: computes the Gram loss
@@ -1143,7 +1162,7 @@ class SparseKPCovR(object):
             self.Ptx = np.matmul(self.Ptx, X)
             self.Ptx /= self.P_scale
 
-    def transform_K(self, KNM):
+    def transform(self, KNM):
         """
             Transform the data into KPCA space
 
@@ -1163,54 +1182,52 @@ class SparseKPCovR(object):
 
             return T
 
-    def inverse_transform_K(self, KNM):
+    def inverse_transform(self, KNM, mode='K'):
         """
             Compute the reconstruction of the kernel matrix
 
             ---Arguments---
             KNM: centered kernel between all points and the representative points
+            mode: whether to do a reconstruction of the kernel ('K')
+                or a reconstruction of X ('X')
 
             ---Returns---
-            Kr: centered reconstructed kernel matrix
+            R: centered reconstructed quantity
         """
 
-        if self.Ptk is None:
-            print("Error: must fit the KPCovR model before transforming")
+        if mode == 'K':
+            if self.Ptk is None:
+                print("Error: must fit the KPCovR model before transforming")
+                return
+            else:
+
+                # Compute the KPCA-like projections
+                T = self.transform(KNM)
+                R = np.matmul(T + self.T_mean, self.Ptk)
+
+        elif mode == 'X':
+            if self.Ptx is None:
+                print("Error: must provide X data during the KPCovR fit "
+                        "before transforming")
+                return
+            else:
+
+                # Compute the KPCA-like projections
+                T = self.transform(KNM)
+
+                # NOTE: why does adding T_mean not work?
+                # perhaps because we need X centered in feature space,
+                # not the RKHS feature space
+                R = np.matmul(T, self.Ptx)
+
         else:
+            print("Error: invalid transformation mode; "
+                    "use 'K' or 'X'")
+            return
 
-            # Compute the KPCA-like projections
-            T = self.transform_K(KNM)
-            Kr = np.matmul(T + self.T_mean, self.Ptk)
+        return R
 
-            return Kr
-
-    def inverse_transform_X(self, KNM):
-        """
-            Compute the reconstruction of the X data
-
-            ---Arguments---
-            KNM: centered kernel between all points and the representative points
-
-            ---Returns---
-            Xr: centered reconstructed X data
-        """
-
-        if self.Ptx is None:
-            print("Error: must provide X data during the KPCovR fit "
-                    "before transforming")
-        else:
-
-            # Compute the KPCA-like projections
-            T = self.transform_K(KNM)
-
-            # NOTE: why does adding T_mean not work?
-            # perhaps because we need X centered in feature space,
-            # not the RKHS feature space
-            Xr = np.matmul(T, self.Ptx)
-
-            return Xr
-
-    def transform_Y(self, KNM):
+    def predict(self, KNM):
         """
             Compute the predictions of Y
 
@@ -1226,7 +1243,7 @@ class SparseKPCovR(object):
         else:
 
             # Compute predicted Y values
-            T = self.transform_K(KNM)
+            T = self.transform(KNM)
             Yp = np.matmul(T + self.T_mean, self.Pty)
 
             return Yp
@@ -1244,7 +1261,7 @@ class SparseKPCovR(object):
         """
 
         # Compute loss
-        Yp = self.transform_Y(KNM)
+        Yp = self.predict(KNM)
         regression_loss = np.linalg.norm(Y - Yp)**2/self.Y_norm**2
 
         return regression_loss
@@ -1280,7 +1297,7 @@ class SparseKPCovR(object):
             gram_loss: Gram loss
         """
 
-        T = self.transform_K(KNM)
+        T = self.transform(KNM)
         K = np.matmul(KNM, np.linalg.inv(KMM))
 
         # Compute Nystrom approximation to the kernel
@@ -1332,11 +1349,10 @@ class IterativeSparseKPCovR(object):
         initialize_fit: initialize the fitting for the sparse KPCovR model
         fit_batch: fit a batch of data
         finalize_fit: finalize the fitting procedure
-        transform_K: transform the data into KPCA space
-        inverse_transform_K: computes the reconstructed kernel matrix
-        inverse_transform_X: computes the reconstructed original input data
-            (if provided during the fit)
-        transform_Y: computes predicted Y values
+        transform: transform the data into KPCA space
+        inverse_transform: computes the reconstructed kernel
+            or the original X data (if provided during the fit)
+        predict: computes predicted Y values
         regression_loss: computes the sparse kernel ridge regression loss
         projection_loss: computes the projection loss
         gram_loss: computes the Gram loss
@@ -1500,7 +1516,7 @@ class IterativeSparseKPCovR(object):
             self.Ptx = np.matmul(self.Ptx, X)
             self.Ptx /= self.P_scale
 
-    def transform_K(self, KNM):
+    def transform(self, KNM):
         """
             Transform the data into KPCA space
 
@@ -1520,53 +1536,50 @@ class IterativeSparseKPCovR(object):
 
             return T
 
-    def inverse_transform_K(self, KNM):
+    def inverse_transform(self, KNM, mode='K'):
         """
             Compute the reconstruction of the kernel matrix
 
             ---Arguments---
             KNM: centered kernel between all points and the representative points
+            mode: whether to do a reconstruction of the kernel ('K')
+                or a reconstruction of X ('X')
 
             ---Returns---
-            Kr: centered reconstructed kernel matrix
+            R: centered reconstructed quantity
         """
 
-        if self.Ptk is None:
-            print("Error: must fit the KPCovR model before transforming")
+        if mode == 'K':
+            if self.Ptk is None:
+                print("Error: must fit the KPCovR model before transforming")
+                return
+            else:
+
+                # Compute the KPCA-like projections
+                T = self.transform(KNM)
+                R = np.matmul(T + self.T_mean, self.Ptk)
+
+        elif mode == 'X':
+            if self.Ptx is None:
+                print("Error: must provide X data during the KPCovR fit before transforming")
+                return
+            else:
+
+                # Compute the KPCA-like projections
+                T = self.transform(KNM)
+
+                # NOTE: why does adding T_mean not work?
+                # perhaps because we need X centered in feature space,
+                # not the RKHS feature space
+                R = np.matmul(T, self.Ptx)
         else:
+            print("Error: invalid reconstruction mode; "
+                    "use 'K' or 'X'")
+            return
 
-            # Compute the KPCA-like projections
-            T = self.transform_K(KNM)
-            Kr = np.matmul(T + self.T_mean, self.Ptk)
+        return R
 
-            return Kr
-
-    def inverse_transform_X(self, KNM):
-        """
-            Compute the reconstruction of the X data
-
-            ---Arguments---
-            KNM: centered kernel between all points and the representative points
-
-            ---Returns---
-            Xr: centered reconstructed X data
-        """
-
-        if self.Ptx is None:
-            print("Error: must provide X data during the KPCovR fit before transforming")
-        else:
-
-            # Compute the KPCA-like projections
-            T = self.transform_K(KNM)
-
-            # NOTE: why does adding T_mean not work?
-            # perhaps because we need X centered in feature space,
-            # not the RKHS feature space
-            Xr = np.matmul(T, self.Ptx)
-
-            return Xr
-
-    def transform_Y(self, KNM):
+    def predict(self, KNM):
         """
             Compute the predictions of Y
 
@@ -1582,7 +1595,7 @@ class IterativeSparseKPCovR(object):
         else:
 
             # Compute predicted Y values
-            T = self.transform_K(KNM)
+            T = self.transform(KNM)
             Yp = np.matmul(T + self.T_mean, self.Pty)
 
             return Yp
@@ -1600,7 +1613,7 @@ class IterativeSparseKPCovR(object):
         """
 
         # Compute loss
-        Yp = self.transform_Y(K)
+        Yp = self.predict(K)
         regression_loss = np.linalg.norm(Y - Yp)**2/self.Y_norm**2
 
         return regression_loss
@@ -1636,7 +1649,7 @@ class IterativeSparseKPCovR(object):
             gram_loss: Gram loss
         """
 
-        T = self.transform_K(KNM)
+        T = self.transform(KNM)
         K = np.matmul(KNM, np.linalg.inv(KMM))
 
         # Compute Nystrom approximation to the kernel
