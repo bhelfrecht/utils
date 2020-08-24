@@ -639,7 +639,8 @@ def make_tuples(data):
 
     return center_tuple
 
-def extract_species_pair_groups(n_features, n_species, combinations=False):
+def extract_species_pair_groups(n_features, n_species, 
+        spectrum_type='power', combinations=False):
     """
         Extract the librascal SOAP feature indices grouped according
         to species pairing
@@ -647,6 +648,8 @@ def extract_species_pair_groups(n_features, n_species, combinations=False):
         ---Arguments---
         n_features: number of features of the SOAP vector
         n_species: number of species (in the environment) of the SOAP vector
+        spectrum_type: extract the feature groups for the power spectrum
+            ('power') or the radial spectrum ('radial')
         combinations: whether to also include combinations of species pairs
             in the feature index groups
 
@@ -655,9 +658,17 @@ def extract_species_pair_groups(n_features, n_species, combinations=False):
             species groupings
     """
 
-    n_species_pairs = n_species * (n_species + 1) / 2
-    
-    if n_features % n_species_pairs != 0:
+    if spectrum_type == 'power':
+        n_species_pairs = n_species * (n_species + 1) / 2
+
+    elif spectrum_type == 'radial':
+        n_species_pairs = n_species
+
+    else:
+        print("Error: invalid spectrum type; use 'power' or 'radial'")
+        return
+
+    if n_features % n_species != 0:
         print("Error: number of features incompatible with number of species")
         return
 
