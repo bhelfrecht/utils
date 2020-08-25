@@ -108,58 +108,17 @@ def sorted_eigh(X, k=None, tiny=None):
 
     return U, V
 
-def save_model(model_instance, output):
-    """
-        JSONify an object through its __dict__ attribute
-
-        ---Arguments---
-        model_instance: model to save
-        output: output file
-    """
-
-    model_dict = model_instance.__dict__.copy()
-
-    # Convert arrays to lists
-    for k, v in model_dict.items():
-        if isinstance(v, np.ndarray):
-            kpcovr_dict[k] = v.tolist()
-    
-    # Save
-    with open(output, 'w') as f:
-        json.dump(model_dict, f)
-
-def load_model(model_instance, input_file):
-    """
-        Load a JSONified object
-
-        ---Arguments---
-        model_instance: class instance in which
-            to load the JSONified object
-        input_file: JSON file containing the
-            __dict__ for the class instance
-
-        ---Returns---
-        model_instance: loaded object instance
-    """
-
-    with open(input_file, 'r') as f:
-        model_dict = json.load(f)
-
-    # Turn lists into arrays
-    for k, v in model_dict.items():
-        if isinstance(v, list):
-            model_dict[k] = np.array(v)
-    
-    model_instance.__dict__ = model_dict
-    
-    return model_instance
-
-def load_json(json_file):
+def load_json(json_file, array_convert=False):
     """
         Shorthand for loading a JSON file
 
         ---Arguments---
         json_file: JSON file to load
+        array_convert: whether to convert lists to arrays.
+            If the loaded object is a list of lists,
+            returns a list of arrays (which can be concatenated
+            with np.vstack). A dict of lists is converted
+            to a list of arrays, and a simple list is left as-is.
 
         ---Returns---
         json_object: object read from the JSON file
@@ -172,16 +131,45 @@ def load_json(json_file):
         with open(json_file, 'r') as f:
             json_object = json.load(f)
 
+    if array_convert:
+        if isinstance(json_object, list):
+            for idx, i in enumerate(json_object):
+                if isinstance(i, list):
+                    json_object[idx] = np.asarray(i)
+        elif isinstance(json_object, dict):
+            for k, v in json_object.items():
+                if isinstance(v, list):
+                    json_object[k] = np.asarray(v)
+
     return json_object
 
-def save_json(json_object, output):
+def save_json(json_object, output, array_convert=False):
     """
         JSONify an object
 
         ---Arguments---
         json_object: container to save
         output: output file
+        array_convert: whether to convert numpy arrays to lists.
+            If the provided object is an array or a list of arrays,
+            it is saved as a list of lists (and then can be loaded
+            as a list of arrays with `load_json` and concatenated as desired).
+            If the provided object is a dict of arrays, it is saved
+            as a dict of lists.
     """
+
+    if array_convert:
+        if isinstance(json_object, np.ndarray):
+            json_object = json_object.tolist()
+        elif isinstance(json_object, list):
+            for idx, i in enumerate(json_object):
+                if isinstance(i, np.ndarray):
+                    json_object[idx] = i.tolist()
+        elif isinstance(json_object, dict):
+            for k, v in json_object.items():
+                if isinstance(v, np.ndarray):
+                    json_object[k] = v.tolist()
+
     if output.endswith('.gz'):
         with gzip.GzipFile(output, 'w') as f:
             json.dump(json_object, f)
