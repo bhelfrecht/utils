@@ -11,6 +11,7 @@ from tqdm import tqdm
 from rascal.representations import SphericalInvariants
 from rascal.neighbourlist.structure_manager import mask_center_atoms_by_species
 import itertools
+from ase.neighborlist import neighbor_list
 
 # TODO: multiprocessing on computing soaps and writing
 # TODO: decide one or multiple hdf5 files, take multiprocessing
@@ -532,6 +533,9 @@ def rrw_neighbors(frame, center_species, env_species, cutoff, self_interaction=F
 
         ---Returns---
         rrw: list of a list of numpy 3D numpy arrays.
+            The outer list corresponds to the atom centers, 
+            and the inner list corresponds to the species groupings
+            and contains several numpy arrays.
             Each numpy array is of shape (3, n_neighbors_a, n_neighbors_b),
             where the axes are organized as follows:
             axis=0: distances to neighbor A from the central atom
@@ -558,6 +562,9 @@ def rrw_neighbors(frame, center_species, env_species, cutoff, self_interaction=F
     idxs = []
 
     # Loop over centers grouped by species
+    # TODO: maybe generalize this so that when using multiple
+    # central atom species the ordering isn't grouped by species,
+    # but instead corresponds to the ordering in the ASE Atoms object
     for center_idxs in center_species_idxs:
         for center in center_idxs:
 
