@@ -4,6 +4,7 @@ import os
 import sys
 import gzip
 import json
+import h5py
 import numpy as np
 from scipy.sparse.linalg import svds
 from scipy.sparse.linalg import eigsh
