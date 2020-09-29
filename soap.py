@@ -50,7 +50,7 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
         covariance_sigma0=0.0, central_weight=1.0, basis_error_exponent=10.0,
         normalise=True, central_reference_all_species=False, 
         diagonal_radial=False, quippy_average=False,
-        average=False, component_idxs=None, output=None):
+        average=False, component_idxs=None, concatenate=False, output=None):
     """
         Compute SOAP vectors with quippy
         (see https://libatoms.github.io/QUIP/descriptors.html)
@@ -77,6 +77,8 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
         central_reference_all_species: use Gaussian reference for all species
         diagonal_radial: return only n1 = n2 elements of power spectrum
         component_idxs: indices of SOAP components to retain
+        concatenate: concatenate SOAP vectors from all structures into a single array
+        output: output file for hdf5
 
         ---Returns---
         soaps: (if output=None) soap vectors
@@ -162,12 +164,34 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
         n_digits = len(str(len(structures) - 1))
 
         # Compute SOAP vectors
-        for sdx, structure in enumerate(tqdm(structures)):
-            soap = descriptor.calc(structure, 
-                    cutoff=descriptor.cutoff())['data']
-            soap = _truncate_average(soap, component_idxs=component_idxs,
-                    average=average)
-            dataset = h.create_dataset(str(sdx).zfill(n_digits), data=soap)
+        if concatenate:
+            n_centers = 0
+            if component_idxs is not None:
+                n_features = len(component_idxs)
+            else:
+                n_features = descriptor.ndim
+
+            for z in Z:
+                n_centers += np.sum([np.count_nonzero(s.numbers == z) for s in structures])
+
+            dataset = h.create_dataset('SOAP', shape=(n_centers, n_features))
+
+            n = 0
+            for sdx, structure in enumerate(tqdm(structures)):
+                soap = descriptor.calc(structure,
+                        cutoff=descriptor.cutoff())['data']
+                soap = _truncate_average(soap, component_idxs=component_idxs,
+                        average=average)
+                dataset[n:n + len(soap)] = soap
+                n += len(soap)
+
+        else:
+            for sdx, structure in enumerate(tqdm(structures)):
+                soap = descriptor.calc(structure, 
+                        cutoff=descriptor.cutoff())['data']
+                soap = _truncate_average(soap, component_idxs=component_idxs,
+                        average=average)
+                dataset = h.create_dataset(str(sdx).zfill(n_digits), data=soap)
 
         # Close output file
         h.close()
@@ -176,7 +200,7 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
 
     # SOAP vectors in memory
     else:
-        soaps = []    
+        soaps = [] 
 
         # Compute SOAP vectors
         for structure in tqdm(structures):
@@ -185,6 +209,9 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
             soap = _truncate_average(soap, component_idxs=component_idxs,
                     average=average)
             soaps.append(soap)
+
+        if concatenate:
+            soaps = np.vstack(soaps)
 
         return soaps
 
@@ -200,7 +227,7 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         inversion_symmetry=True, normalize=True,
         optimization_args={}, cutoff_function_parameters={},
         coefficient_subselection=None,
-        average=False, component_idxs=None, output=None):
+        average=False, component_idxs=None, concatenate=False, output=None):
     """
         Compute SOAP vectors with Librascal
 
@@ -230,6 +257,7 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         average: average SOAP vectors over the central atoms in a structure
         component_idxs: indices of SOAP components to retain; 
             discard all other components
+        concatenate: concatenate SOAP vectors from all structures into a single array
         output: output file for hdf5
 
         ---Returns---
@@ -305,12 +333,33 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         n_digits = len(str(len(structures) - 1))
 
         # Compute SOAP vectors
-        for sdx, structure in enumerate(tqdm(structures_copy)):
-            soap_rep = descriptor.transform(structure)
-            soap = soap_rep.get_features(descriptor)
-            soap = _truncate_average(soap, component_idxs=component_idxs,
-                    average=average)
-            dataset = h.create_dataset(str(sdx).zfill(n_digits), data=soap)
+        if concatenate:
+            n_centers = 0
+            if component_idxs is not None:
+                n_features = len(component_idxs)
+            else:
+                n_features = descriptor.get_num_coefficients(len(Z))
+
+            for z in Z:
+                n_centers += np.sum([np.count_nonzero(s.numbers == z) for s in structures])
+
+            dataset = h.create_dataset('SOAP', shape=(n_centers, n_features))
+
+            n = 0
+            for sdx, structure in enumerate(tqdm(structures)):
+                soap_rep = descriptor.transform(structure)
+                soap = soap_rep.get_features(descriptor)
+                soap = _truncate_average(soap, component_idxs=component_idxs,
+                        average=average)
+                dataset[n:n + len(soap)] = soap
+                n += len(soap)
+        else:
+            for sdx, structure in enumerate(tqdm(structures_copy)):
+                soap_rep = descriptor.transform(structure)
+                soap = soap_rep.get_features(descriptor)
+                soap = _truncate_average(soap, component_idxs=component_idxs,
+                        average=average)
+                dataset = h.create_dataset(str(sdx).zfill(n_digits), data=soap)
 
         # Close output file
         h.close()
@@ -328,6 +377,9 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
             soap = _truncate_average(soap, component_idxs=component_idxs,
                     average=average)
             soaps.append(soap)
+
+        if concatenate:
+            soaps = np.vstack(soaps)
 
         return soaps
 
