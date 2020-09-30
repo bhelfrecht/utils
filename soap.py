@@ -3,6 +3,7 @@
 import os
 import sys
 import numpy as np
+from copy import deepcopy
 from scipy.linalg import fractional_matrix_power
 from scipy.special import gamma, eval_legendre
 from quippy.descriptors import Descriptor
@@ -165,16 +166,19 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
 
         # Compute SOAP vectors
         if concatenate:
-            n_centers = 0
             if component_idxs is not None:
                 n_features = len(component_idxs)
             else:
                 n_features = descriptor.ndim
 
-            for z in Z:
-                n_centers += np.sum([np.count_nonzero(s.numbers == z) for s in structures])
+            if average or quippy_average:
+                n_centers = len(structures)
+            else:
+                n_centers = 0
+                for z in Z:
+                    n_centers += np.sum([np.count_nonzero(s.numbers == z) for s in structures])
 
-            dataset = h.create_dataset('SOAP', shape=(n_centers, n_features))
+            dataset = h.create_dataset('0', shape=(n_centers, n_features), dtype='float64')
 
             n = 0
             for sdx, structure in enumerate(tqdm(structures)):
@@ -182,6 +186,8 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
                         cutoff=descriptor.cutoff())['data']
                 soap = _truncate_average(soap, component_idxs=component_idxs,
                         average=average)
+                if soap.ndim == 1:
+                    soap = np.reshape(soap, (1, -1))
                 dataset[n:n + len(soap)] = soap
                 n += len(soap)
 
@@ -266,15 +272,23 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
     """
 
     # Center and wrap the frames
-    # TODO: change this to a deepcopy
-    # as the original objects are modified
-    structures_copy = structures.copy()
+    # TODO: need safeguard for concatenate=True,
+    # where an error is raised if not all structures
+    # have the same species
+    structures_copy = deepcopy(structures)
+    species_list = []
     for structure in structures_copy:
         structure.center()
         structure.wrap(eps=1.0E-12)
 
         # Mask central atoms
         mask_center_atoms_by_species(structure, species_select=Z)
+
+        # Extract environment species
+        structure_species = np.unique(structure.numbers)
+        species_list.extend(np.setdiff1d(structure_species, species_list))
+
+    species_list.sort()
 
     # Setup the descriptor
     descriptor = SphericalInvariants(soap_type=soap_type,
@@ -334,23 +348,28 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
 
         # Compute SOAP vectors
         if concatenate:
-            n_centers = 0
             if component_idxs is not None:
                 n_features = len(component_idxs)
             else:
-                n_features = descriptor.get_num_coefficients(len(Z))
+                n_features = descriptor.get_num_coefficients(len(species_list))
 
-            for z in Z:
-                n_centers += np.sum([np.count_nonzero(s.numbers == z) for s in structures])
+            if average:
+                n_centers = len(structures)
+            else:
+                n_centers = 0
+                for z in Z:
+                    n_centers += np.sum([np.count_nonzero(s.numbers == z) for s in structures])
 
-            dataset = h.create_dataset('SOAP', shape=(n_centers, n_features))
+            dataset = h.create_dataset('0', shape=(n_centers, n_features), dtype='float64')
 
             n = 0
-            for sdx, structure in enumerate(tqdm(structures)):
+            for sdx, structure in enumerate(tqdm(structures_copy)):
                 soap_rep = descriptor.transform(structure)
                 soap = soap_rep.get_features(descriptor)
                 soap = _truncate_average(soap, component_idxs=component_idxs,
                         average=average)
+                if soap.ndim == 1:
+                    soap = np.reshape(soap, (1, -1))
                 dataset[n:n + len(soap)] = soap
                 n += len(soap)
         else:
