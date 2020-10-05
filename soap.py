@@ -51,7 +51,8 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
         covariance_sigma0=0.0, central_weight=1.0, basis_error_exponent=10.0,
         normalise=True, central_reference_all_species=False, 
         diagonal_radial=False, quippy_average=False,
-        average=False, component_idxs=None, concatenate=False, output=None):
+        average=False, component_idxs=None, concatenate=False, 
+        chunks=None, output=None):
     """
         Compute SOAP vectors with quippy
         (see https://libatoms.github.io/QUIP/descriptors.html)
@@ -79,6 +80,7 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
         diagonal_radial: return only n1 = n2 elements of power spectrum
         component_idxs: indices of SOAP components to retain
         concatenate: concatenate SOAP vectors from all structures into a single array
+        chunks: if concatenate is True, chunk shape for HDF5
         output: output file for hdf5
 
         ---Returns---
@@ -178,7 +180,8 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
                 for z in Z:
                     n_centers += np.sum([np.count_nonzero(s.numbers == z) for s in structures])
 
-            dataset = h.create_dataset('0', shape=(n_centers, n_features), dtype='float64')
+            dataset = h.create_dataset('0', shape=(n_centers, n_features), 
+                    chunks=chunks, dtype='float64')
 
             n = 0
             for sdx, structure in enumerate(tqdm(structures)):
@@ -233,7 +236,8 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         inversion_symmetry=True, normalize=True,
         optimization_args={}, cutoff_function_parameters={},
         coefficient_subselection=None,
-        average=False, component_idxs=None, concatenate=False, output=None):
+        average=False, component_idxs=None, concatenate=False, 
+        chunks=None, output=None):
     """
         Compute SOAP vectors with Librascal
 
@@ -264,6 +268,7 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         component_idxs: indices of SOAP components to retain; 
             discard all other components
         concatenate: concatenate SOAP vectors from all structures into a single array
+        chunks: if concatenate is True, chunk shape for HDF5
         output: output file for hdf5
 
         ---Returns---
@@ -360,7 +365,8 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
                 for z in Z:
                     n_centers += np.sum([np.count_nonzero(s.numbers == z) for s in structures])
 
-            dataset = h.create_dataset('0', shape=(n_centers, n_features), dtype='float64')
+            dataset = h.create_dataset('0', shape=(n_centers, n_features), 
+                    chunks=chunks, dtype='float64')
 
             n = 0
             for sdx, structure in enumerate(tqdm(structures_copy)):
