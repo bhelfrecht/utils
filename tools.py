@@ -171,6 +171,10 @@ def save_json(json_object, output, array_convert=False):
                 if isinstance(v, np.ndarray):
                     json_object[k] = v.tolist()
 
+                # Apparently np.int32 isn't serializable
+                elif isinstance(v, np.int32):
+                    json_object[k] = int(v)
+
     if output.endswith('.gz'):
         with gzip.GzipFile(output, 'w') as f:
             json.dump(json_object, f)
