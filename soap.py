@@ -497,53 +497,78 @@ def legendre_polynomials(l, x):
     """
     return eval_legendre(l, x)
 
-def reshape_soaps(soaps, n_pairs, n_max, l_max):
+def reshape_soaps(soaps, n_pairs, n_max, l_max=None):
     """
         Reshape a SOAP vector to have the shape
         (n_centers, n_species_pairs, n_max, n_max, l_max+1)
+        in the case of the power spectrum, and
+        (n_centers, n_species, n_max)
+        in the case of the radial spectrum
 
         ---Arguments---
         soaps: soap vectors to reshape, size (n_centers, n_features).
             n_features must equal n_pairs * n_max ** 2 * (l_max + 1)
-        n_pairs: number of unique pairings of the species
-            used to build the SOAP vector
+            for the power spectrum, and n_pairs * n_max for the radial spectrum
+        n_pairs: for the power spectrum, 
+            the number of unique pairings of the environment species
+            used to build the SOAP vector. For the radial spectrum,
+            the number of environment species
         n_max: maximum order of the radial GTO
-        l_max: maximum order of the angular Legendre polynomials
+        l_max: maximum order of the angular Legendre polynomials.
+            If None, reshapes SOAPs for the radial spectrum
 
         ---Returns---
-        soap: reshaped SOAP with shape (n_centers, n_max, n_max, l_max+1)
+        soap: reshaped SOAP with shape 
+            (n_centers, n_pairs, n_max, n_max, l_max+1)
+            for the power spectrum, or shape 
+            (n_centers, n_pairs, n_max) for the radial spectrum
     """
-    if soaps.ndim == 1:
-        return np.reshape(soaps, (1, n_pairs, n_max, n_max, l_max+1))
-    else:
-        return np.reshape(soaps, (soaps.shape[0], n_pairs, n_max, n_max, l_max+1))
+    
+    # Reshape for power spectrum
+    if l_max is not None:
+        if soaps.ndim == 1:
+            return np.reshape(soaps, (1, n_pairs, n_max, n_max, l_max+1))
+        else:
+            return np.reshape(soaps, (soaps.shape[0], n_pairs, n_max, n_max, l_max+1))
 
-def compute_soap_density(n_max, l_max, cutoff, soaps, 
-                         r_grid, p_grid, chunk_size_r=0, chunk_size_p=0):
+    # Reshape for radial spectrum
+    else:
+        if soaps.ndim == 1:
+            return np.reshape(soaps, (1, n_pairs, n_max))
+        else:
+            return np.reshape(soaps, (soaps.shape[0], n_pairs, n_max))
+
+def compute_soap_density(soaps, cutoff, n_max, r_grid, l_max=None, p_grid=None, 
+                         chunk_size_r=0, chunk_size_p=0):
     """
         Compute SOAP density
 
         ---Arguments---
-        n_max: maximum order of the radial GTO
-        l_max: maximum order of the Legendre polynomials
-        cutoff: environment cutoff
         soaps: soap vectors on which to compute the density,
-            must have the shape (n_centers, n_pairs, n_max, n_max, l_max+1),
-            where n_pairs is the number of unique species pairings
+            must have the shape (n_centers, n_pairs, n_max, n_max, l_max+1)
+            for the power spectrum, and (n_centers, n_species, n_max),
+            where n_pairs is the number of unique environment species pairings
+            and n_species is the number of environment species 
             (see reshape_soaps)
+        cutoff: environment cutoff
         r_grid: grid on which to compute the GTOs
         p_grid: grid on which to compute the Legendre polynomials
+        n_max: maximum order of the radial GTO
+        l_max: maximum order of the Legendre polynomials.
+            If None, do density for radial spectrum
         chunk_size_r: if > 0, compute density in GTO-grid-based chunks
         chunk_size_p: if > 0, compute density in Legendre-polynomial-based chunks
 
         ---Returns---
         density: SOAP reconstructed density with shape
-            (n_centers, n_pairs, len(r_grid), len(r_grid), len(p_grid)
+            (n_centers, n_pairs, len(r_grid), len(r_grid), len(p_grid))
+            for the power spectrum, and
+            (n_centers, n_species, len(r_grid))
+            for the radial spectrum
     """
     
     # Setup grids of the expansion orders
     n_grid = np.arange(0, n_max)
-    l_grid = np.arange(0, l_max + 1)
     sigma_grid = gto_sigma(cutoff, n_grid, n_max)
     
     # Compute radial normalization factor based on the GTO overlap
@@ -557,11 +582,7 @@ def compute_soap_density(n_max, l_max, cutoff, soaps,
     R_n = np.matmul(S, gto(r_grid[np.newaxis, :],
                            n_grid[:, np.newaxis],
                            sigma_grid[:, np.newaxis]))
-    
-    # Compute Legendre polynomials, shape (l_max+1, len(p_grid))
-    P_l = legendre_polynomials(l_grid[:, np.newaxis],
-                               p_grid[np.newaxis, :])
-    
+
     # Set up the grid-based chunking to speed
     # up the density computation and reduce memory requirements
     if chunk_size_r <= 0:
@@ -571,28 +592,47 @@ def compute_soap_density(n_max, l_max, cutoff, soaps,
         if len(r_grid) % chunk_size_r > 0:
             n_chunks_r += 1
     
-    if chunk_size_p <= 0:
-        n_chunks_p = 1
-    else:
-        n_chunks_p = len(p_grid) // chunk_size_p
-        if len(p_grid) % chunk_size_p > 0:
-            n_chunks_p += 1
+    # Do radial spectrum
+    if l_max is None:
+
+        # Compute the density in grid-based chunks
+        density = np.zeros((soaps.shape[0], soaps.shape[1], len(r_grid)))
             
-    # Compute the density in grid-based chunks
-    density = np.zeros((soaps.shape[0], soaps.shape[1], 
-                        len(r_grid), len(r_grid), len(p_grid)))
-        
-    for n in range(0, n_chunks_r):
-        for m in range(0, n_chunks_r):
-            for p in range(0, n_chunks_p):
-                slice_n = slice(n * chunk_size_r, (n + 1) * chunk_size_r, 1)
-                slice_m = slice(m * chunk_size_r, (m + 1) * chunk_size_r, 1)
-                slice_p = slice(p * chunk_size_r, (p + 1) * chunk_size_p, 1)
-                r_n = np.reshape(R_n[:, slice_n], (n_max, 1, 1, -1, 1, 1))
-                r_m = np.reshape(R_n[:, slice_m], (1, n_max, 1, 1, -1, 1))
-                p_l = np.reshape(P_l[:, slice_p], (1, 1, l_max + 1, 1, 1, -1))
-                density[:, :, slice_n, slice_m, slice_p] = \
-                        np.tensordot(soaps, r_n * r_m * p_l, axes=3)
+        for n in range(0, n_chunks_r):
+            slice_n = slice(n * chunk_size_r, (n + 1) * chunk_size_r, 1)
+            r_n = R_n[:, slice_n]
+            density[:, :, slice_n] = np.tensordot(soaps, r_n, axes=1)
+    
+    # Do power spectrum
+    else:
+        l_grid = np.arange(0, l_max + 1)
+
+        # Compute Legendre polynomials, shape (l_max+1, len(p_grid))
+        P_l = legendre_polynomials(l_grid[:, np.newaxis],
+                                   p_grid[np.newaxis, :])
+    
+        if chunk_size_p <= 0:
+            n_chunks_p = 1
+        else:
+            n_chunks_p = len(p_grid) // chunk_size_p
+            if len(p_grid) % chunk_size_p > 0:
+                n_chunks_p += 1
+                
+        # Compute the density in grid-based chunks
+        density = np.zeros((soaps.shape[0], soaps.shape[1], 
+                            len(r_grid), len(r_grid), len(p_grid)))
+            
+        for n in range(0, n_chunks_r):
+            for m in range(0, n_chunks_r):
+                for p in range(0, n_chunks_p):
+                    slice_n = slice(n * chunk_size_r, (n + 1) * chunk_size_r, 1)
+                    slice_m = slice(m * chunk_size_r, (m + 1) * chunk_size_r, 1)
+                    slice_p = slice(p * chunk_size_r, (p + 1) * chunk_size_p, 1)
+                    r_n = np.reshape(R_n[:, slice_n], (n_max, 1, 1, -1, 1, 1))
+                    r_m = np.reshape(R_n[:, slice_m], (1, n_max, 1, 1, -1, 1))
+                    p_l = np.reshape(P_l[:, slice_p], (1, 1, l_max + 1, 1, 1, -1))
+                    density[:, :, slice_n, slice_m, slice_p] = \
+                            np.tensordot(soaps, r_n * r_m * p_l, axes=3)
                 
     return density
 
@@ -625,6 +665,7 @@ def rrw_neighbors(frame, center_species, env_species, cutoff, self_interaction=F
             axis=1: index of neighbor A
             axis=2: index of neighbor B
     """
+    # TODO: generalize to work also with the radial spectrum
 
     # Extract indices of central atoms and environment atoms
     center_species_idxs = [np.nonzero(frame.numbers == i)[0] for i in center_species]
