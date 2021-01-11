@@ -587,6 +587,7 @@ def compute_soap_density(soaps, cutoff, n_max, r_grid, l_max=None, p_grid=None,
     # up the density computation and reduce memory requirements
     if chunk_size_r <= 0:
         n_chunks_r = 1
+        chunk_size_r = len(r_grid)
     else:
         n_chunks_r = len(r_grid) // chunk_size_r
         if len(r_grid) % chunk_size_r > 0:
@@ -613,6 +614,7 @@ def compute_soap_density(soaps, cutoff, n_max, r_grid, l_max=None, p_grid=None,
     
         if chunk_size_p <= 0:
             n_chunks_p = 1
+            chunk_size_p = len(p_grid)
         else:
             n_chunks_p = len(p_grid) // chunk_size_p
             if len(p_grid) % chunk_size_p > 0:
