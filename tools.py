@@ -6,6 +6,7 @@ import gzip
 import json
 import h5py
 import numpy as np
+from copy import deepcopy
 from scipy.sparse.linalg import svds
 from scipy.sparse.linalg import eigsh
 
@@ -158,6 +159,9 @@ def save_json(json_object, output, array_convert=False):
             If the provided object is a dict of arrays, it is saved
             as a dict of lists.
     """
+    
+    # Make sure we aren't modifying the original
+    json_object = deepcopy(json_object)
 
     if array_convert:
         if isinstance(json_object, np.ndarray):
