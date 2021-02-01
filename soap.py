@@ -103,26 +103,28 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
     species_Z_str = "{{{:s}}}".format(' '.join(species_Z_list))
 
     # Build string of SOAP parameters
-    soap_str = ["soap",
-            "Z={:s}".format(Z_str),
-            "n_Z={:d}".format(n_Z),
-            "species_Z={:s}".format(species_Z_str),
-            "n_species={:d}".format(n_species_Z),
-            "n_max={:d}".format(n_max),
-            "l_max={:d}".format(l_max),
-            "cutoff={:f}".format(cutoff),
-            "cutoff_transition_width={:f}".format(cutoff_transition_width),
-            "atom_sigma={:f}".format(atom_sigma),
-            "cutoff_scale={:f}".format(cutoff_scale),
-            "cutoff_rate={:f}".format(cutoff_rate),
-            "cutoff_dexp={:d}".format(cutoff_dexp),
-            "covariance_sigma0={:f}".format(covariance_sigma0),
-            "central_weight={:f}".format(central_weight),
-            "basis_error_exponent={:f}".format(basis_error_exponent),
-            "normalise={:s}".format(str(normalise)),
-            "average={:s}".format(str(quippy_average)),
-            "central_reference_all_species={:s}".format(str(central_reference_all_species)),
-            "diagonal_radial={:s}".format(str(diagonal_radial))]
+    soap_str = [
+        "soap",
+        f"Z={Z_str:s}",
+        f"n_Z={n_Z:d}",
+        f"species_Z={species_Z_str:s}",
+        f"n_species={n_species_Z:d}",
+        f"n_max={n_max:d}",
+        f"l_max={l_max:d}",
+        f"cutoff={cutoff:f}",
+        f"cutoff_transition_width={cutoff_transition_width:f}",
+        f"atom_sigma={atom_sigma:f}",
+        f"cutoff_scale={cutoff_scale:f}",
+        f"cutoff_rate={cutoff_rate:f}",
+        f"cutoff_dexp={cutoff_dexp:d}",
+        f"covariance_sigma0={covariance_sigma0:f}",
+        f"central_weight={central_weight:f}",
+        f"basis_error_exponent={basis_error_exponent:f}",
+        f"normalise={normalise:s}",
+        f"average={quippy_average:s}",
+        f"central_reference_all_species={central_reference_all_species:s}",
+        f"diagonal_radial={diagonal_radial:s}"
+    ]
     soap_str = ' '.join(soap_str)
 
     # Setup the descriptor
@@ -137,6 +139,7 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
         # Add metadata
         # Have to set attributes individually;
         # can't set as a whole dictonary at once
+        # TODO: do quippy descriptors have accessible parameter dictionaries?
         h.attrs['Z'] = Z 
         h.attrs['n_Z'] = n_Z
         h.attrs['species_Z'] = species_Z 
@@ -178,10 +181,14 @@ def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0,
             else:
                 n_centers = 0
                 for z in Z:
-                    n_centers += np.sum([np.count_nonzero(s.numbers == z) for s in structures])
+                    n_centers += np.sum(
+                        [np.count_nonzero(s.numbers == z) for s in structures]
+                    )
 
-            dataset = h.create_dataset('0', shape=(n_centers, n_features), 
-                    chunks=chunks, dtype='float64')
+            dataset = h.create_dataset(
+                '0', shape=(n_centers, n_features), 
+                chunks=chunks, dtype='float64'
+            )
 
             n = 0
             for sdx, structure in enumerate(tqdm(structures)):
@@ -296,23 +303,25 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
     species_list.sort()
 
     # Setup the descriptor
-    descriptor = SphericalInvariants(soap_type=soap_type,
-            max_radial=max_radial,
-            max_angular=max_angular,
-            interaction_cutoff=interaction_cutoff,
-            cutoff_smooth_width=cutoff_smooth_width,
-            cutoff_function_type=cutoff_function_type,
-            gaussian_sigma_constant=gaussian_sigma_constant,
-            gaussian_sigma_type=gaussian_sigma_type,
-            radial_basis=radial_basis,
-            global_species=global_species,
-            expansion_by_species_method=expansion_by_species_method,
-            normalize=normalize,
-            inversion_symmetry=inversion_symmetry,
-            compute_gradients=compute_gradients,
-            optimization_args=optimization_args,
-            cutoff_function_parameters=cutoff_function_parameters,
-            coefficient_subselection=coefficient_subselection)
+    descriptor = SphericalInvariants(
+        soap_type=soap_type,
+        max_radial=max_radial,
+        max_angular=max_angular,
+        interaction_cutoff=interaction_cutoff,
+        cutoff_smooth_width=cutoff_smooth_width,
+        cutoff_function_type=cutoff_function_type,
+        gaussian_sigma_constant=gaussian_sigma_constant,
+        gaussian_sigma_type=gaussian_sigma_type,
+        radial_basis=radial_basis,
+        global_species=global_species,
+        expansion_by_species_method=expansion_by_species_method,
+        normalize=normalize,
+        inversion_symmetry=inversion_symmetry,
+        compute_gradients=compute_gradients,
+        optimization_args=optimization_args,
+        cutoff_function_parameters=cutoff_function_parameters,
+        coefficient_subselection=coefficient_subselection
+    )
 
     # Write SOAP vectors to file
     if output is not None:
@@ -324,24 +333,14 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
         # Have to set attributes individually;
         # can't set as a whole dictonary at once
         h.attrs['Z'] = Z 
-        h.attrs['soap_type'] = soap_type
-        h.attrs['max_radial'] = max_radial
-        h.attrs['max_angular'] = max_angular
-        h.attrs['interaction_cutoff'] = interaction_cutoff
-        h.attrs['cutoff_smooth_width'] = cutoff_smooth_width
-        h.attrs['cutoff_function_type'] = cutoff_function_type
-        h.attrs['gaussian_sigma_constant'] = gaussian_sigma_constant
-        h.attrs['gaussian_sigma_type'] = gaussian_sigma_type
-        # TODO: make these saveable to the HDF5
-        #h.attrs['radial_basis'] = radial_basis
-        #h.attrs['global_species'] = global_species
-        #h.attrs['expansion_by_species_method'] = expansion_by_species_method
-        #h.attrs['inversion_symmetry'] = inversion_symmetry
-        #h.attrs['normalize'] = normalize
-        #h.attrs['compute_gradients'] = compute_gradients
-        #h.attrs['optimization_args'] = optimization_args
-        #h.attrs['cutoff_function_parameters'] = cutoff_function_parameters
-        #h.attrs['coefficient_subselection'] = coefficient_subselection
+        for key, value in descriptor._get_init_params().items():
+            if isinstance(value, dict):
+                for subkey, subvalue in value.items():
+                    h.attrs[f'{key}:{subkey}'] = subvalue
+            else:
+                h.attrs[key] = value
+        # TODO: remove `coefficient_subselection` once it makes its way into _get_init_params
+        h.attrs['coefficient_subselection'] = coefficient_subselection
         h.attrs['average'] = average
         if component_idxs is not None:
             h.attrs['component_idxs'] = component_idxs
@@ -363,10 +362,14 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
             else:
                 n_centers = 0
                 for z in Z:
-                    n_centers += np.sum([np.count_nonzero(s.numbers == z) for s in structures])
+                    n_centers += np.sum(
+                        [np.count_nonzero(s.numbers == z) for s in structures]
+                    )
 
-            dataset = h.create_dataset('0', shape=(n_centers, n_features), 
-                    chunks=chunks, dtype='float64')
+            dataset = h.create_dataset(
+                '0', shape=(n_centers, n_features), 
+                chunks=chunks, dtype='float64'
+            )
 
             n = 0
             for sdx, structure in enumerate(tqdm(structures_copy)):
