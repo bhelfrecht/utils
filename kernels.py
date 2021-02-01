@@ -380,6 +380,38 @@ def gaussian_kernel(XA, XB, gamma=1):
     K = np.exp(-gamma*D)
     return K
 
+@kernel_decorator
+def gaussian_kernel_series(XA, XB, gamma=1, delta=1.0E-12, max_terms=15):
+    """
+        Builds a Gaussian kernel based on a Taylor series expansion
+
+        ---Arguments---
+        XA, XB: matrices of data with which to build the kernel,
+            where each row is a sample and each column a feature
+        gamma: scaling parameter for the Gaussian
+        delta: tolerance for truncating the Taylor series.
+            Stop adding terms when the change in the value is less than delta
+        max_terms: maximum number of terms in the expansion
+
+        ---Returns---
+        K: Approximate Gaussian kernel between XA and XB
+    """
+
+    D = sqeuclidean_distances(XA, XB)
+    K = np.zeros(D.shape)
+    n_factorial = 1.0
+    for n in range(0, max_terms):
+        k = (-gamma * D) ** n / n_factorial
+        K += k
+        if np.linalg.norm(k) / np.sqrt(k.shape[0]) <= delta:
+            break
+        n_factorial *= n + 1
+
+    if n >= max_terms:
+        print('Warning: reached maximum number of iterations')
+
+    return K
+
 @subkernel_decorator
 def gaussian_subkernel(XA, XB, gamma=1):
     """
