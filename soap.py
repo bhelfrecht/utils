@@ -340,6 +340,8 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
             else:
                 h.attrs[key] = value
         # TODO: remove `coefficient_subselection` once it makes its way into _get_init_params
+        if coefficient_subselection is None:
+            coefficient_subselection = []
         h.attrs['coefficient_subselection'] = coefficient_subselection
         h.attrs['average'] = average
         if component_idxs is not None:
