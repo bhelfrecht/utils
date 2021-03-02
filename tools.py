@@ -179,6 +179,9 @@ def save_json(json_object, output, array_convert=False):
                 elif isinstance(v, np.int32):
                     json_object[k] = int(v)
 
+                elif hasattr(v, '__dict__'):
+                    json_object[k] = v.__dict__
+
     if output.endswith('.gz'):
         with gzip.GzipFile(output, 'w') as f:
             json.dump(json_object, f)
