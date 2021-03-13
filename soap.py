@@ -503,6 +503,44 @@ def gto_overlap(n, m, sigma_n, sigma_m):
     nm = 0.5 * (3 + n + m)
     return 0.5 * N_n * N_m * (b_n + b_m) ** (-nm) * gamma(nm) # why 0.5?
 
+def orthogonalized_gto(cutoff, n_max, r_grid):
+    """
+        Compute orthogonalized GTOs
+
+        Adapted from a routine originally 
+        written by Alexander Goscinski
+
+        ---Arguments---
+        cutoff: interaction cutoff
+        n_max: maximum number of radial functions
+        r_grid: grid of radial distances on which to evaluate the GTOs
+
+        ---Returns---
+        R_n: orthogonalized GTOs evaluated on `r_grid`
+    """
+
+    # Setup grids of the expansion orders
+    n_grid = np.arange(0, n_max)
+    sigma_grid = gto_sigma(cutoff, n_grid, n_max)
+    
+    # Compute radial normalization factor based on the GTO overlap
+    S = gto_overlap(
+        n_grid[:, np.newaxis],
+        n_grid[np.newaxis, :],
+        sigma_grid[:, np.newaxis],
+        sigma_grid[np.newaxis, :]
+    )
+    S = fractional_matrix_power(S, -0.5)
+    
+    # Compute GTOs, shape (n_max, len(r_grid))
+    R_n = np.matmul(S, gto(
+        r_grid[np.newaxis, :],
+        n_grid[:, np.newaxis],
+        sigma_grid[:, np.newaxis]
+    ))
+
+    return R_n
+
 def legendre_polynomials(l, x):
     """
         Evaluate Legendre Polynomials
