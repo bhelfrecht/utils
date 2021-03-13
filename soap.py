@@ -417,6 +417,9 @@ def gto_sigma(cutoff, n, n_max):
     """
         Compute GTO sigma
 
+        Adapted from a routine originally 
+        written by Alexander Goscinski
+
         ---Arguments---
         cutoff: environment cutoff
         n: order of the GTO
@@ -431,6 +434,9 @@ def gto_width(sigma):
     """
         Compute GTO width
 
+        Adapted from a routine originally 
+        written by Alexander Goscinski
+
         ---Arguments---
         sigma: GTO sigma parameter
 
@@ -442,6 +448,9 @@ def gto_width(sigma):
 def gto_prefactor(n, sigma):
     """
         Compute GTO prefactor
+
+        Adapted from a routine originally 
+        written by Alexander Goscinski
 
         ---Arguments---
         n: order of the GTO
@@ -455,6 +464,9 @@ def gto_prefactor(n, sigma):
 def gto(r, n, sigma):
     """
         Compute GTO
+
+        Adapted from a routine originally 
+        written by Alexander Goscinski
 
         ---Arguments---
         r: grid on which to evaluate the GTO
@@ -471,6 +483,9 @@ def gto(r, n, sigma):
 def gto_overlap(n, m, sigma_n, sigma_m):
     """
         Compute overlap of two GTOs
+
+        Adapted from a routine originally 
+        written by Alexander Goscinski
 
         ---Arguments---
         n: order of the first GTO
