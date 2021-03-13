@@ -5,7 +5,7 @@ import sys
 import numpy as np
 from copy import deepcopy
 from scipy.linalg import fractional_matrix_power
-from scipy.special import gamma, eval_legendre
+from scipy.special import gamma, legendre, roots_legendre, eval_legendre
 from quippy.descriptors import Descriptor
 import h5py
 from tqdm import tqdm
@@ -555,6 +555,58 @@ def legendre_polynomials(l, x):
     """
     return eval_legendre(l, x)
 
+def dvr(cutoff, n_max, gaussian_sigma, r_grid):
+    """
+        Compute DVR polynomials
+
+        Adapted from a routine originally 
+        written by Alexander Goscinski
+
+        ---References--- 
+        J. C. Light and T. Carrington, Jr.
+        Discrete-variable representations and their utilization,
+        Advances in Chemical Physics 114, 263--310 (2000) [Section 2]
+
+        ---Arguments---
+        cutoff: interaction cutoff
+        n_max: maximum number of radial functions
+        gaussian_sigma: Gaussian width for DVR polynomial cutoff
+        r_grid: radial grid on which to compute the polynomials
+
+        ---Returns---
+        R_n: DVR radial basis functions
+    """
+
+    pts, wts, _ = roots_legendre(n_max)
+    
+    grid_cutoff = cutoff + 3 * gaussian_sigma
+    # TODO: check that the cutoff and normalization to [-1, 1] is correct
+    # TODO: must r_grid already have the correct cutoff?
+    grid = (r_grid - grid_cutoff / 2) / (grid_cutoff / 2)
+
+    legendre_polynomials = [
+        np.sqrt((2 * n + 1) / 2) * legendre(n) for n in range(0, n_max)
+    ]
+
+    # TODO: clean this up, double for loop over shape of T
+    T = np.array(
+        [
+            [
+                np.sqrt(wts[n]) * legendre_polynomials[m](pts[n]) 
+                for n in range(0, n_max)
+            ] 
+            for m in range(0, n_max)
+        ]
+    )
+
+    legendre_polynomials = np.array([
+        legendre_polynomials[n](grid) for n in range(0, n_max)
+    ])
+
+    # TODO: get shape
+    R_n = T.T @ legendre_polynomials
+    return R_n
+
 def reshape_soaps(soaps, n_pairs, n_max, l_max=None):
     """
         Reshape a SOAP vector to have the shape
@@ -596,8 +648,18 @@ def reshape_soaps(soaps, n_pairs, n_max, l_max=None):
         else:
             return np.reshape(soaps, (soaps.shape[0], n_pairs, n_max))
 
-def compute_soap_density(soaps, cutoff, n_max, r_grid, l_max=None, p_grid=None, 
-                         chunk_size_r=0, chunk_size_p=0):
+def compute_soap_density(
+    soaps, 
+    cutoff, 
+    n_max, 
+    r_grid, 
+    l_max=None, 
+    p_grid=None, 
+    chunk_size_r=0, 
+    chunk_size_p=0, 
+    radial_basis='GTO', 
+    gaussian_sigma=0.5
+):
     """
         Compute SOAP density
 
@@ -616,6 +678,8 @@ def compute_soap_density(soaps, cutoff, n_max, r_grid, l_max=None, p_grid=None,
             If None, do density for radial spectrum
         chunk_size_r: if > 0, compute density in GTO-grid-based chunks
         chunk_size_p: if > 0, compute density in Legendre-polynomial-based chunks
+        radial_basis: which radial basis to use ('GTO' or 'DVR')
+        gaussian_sigma: Gaussian width for DVR polynomials
 
         ---Returns---
         density: SOAP reconstructed density with shape
@@ -625,21 +689,13 @@ def compute_soap_density(soaps, cutoff, n_max, r_grid, l_max=None, p_grid=None,
             for the radial spectrum
     """
     
-    # Setup grids of the expansion orders
-    n_grid = np.arange(0, n_max)
-    sigma_grid = gto_sigma(cutoff, n_grid, n_max)
-    
-    # Compute radial normalization factor based on the GTO overlap
-    S = gto_overlap(n_grid[:, np.newaxis],
-                    n_grid[np.newaxis, :],
-                    sigma_grid[:, np.newaxis],
-                    sigma_grid[np.newaxis, :])
-    S = fractional_matrix_power(S, -0.5)
-    
-    # Compute GTOs, shape (n_max, len(r_grid))
-    R_n = np.matmul(S, gto(r_grid[np.newaxis, :],
-                           n_grid[:, np.newaxis],
-                           sigma_grid[:, np.newaxis]))
+    if radial_basis == 'GTO':
+        R_n = orthogonalized_gto(cutoff, n_max, r_grid)
+    elif radial_basis == 'DVR':
+        R_n = dvr(cutoff, n_max, gaussian_sigma, r_grid)
+    else:
+        print("Error: radial_basis must be one of 'GTO' or 'DVR'")
+        return
 
     # Set up the grid-based chunking to speed
     # up the density computation and reduce memory requirements
