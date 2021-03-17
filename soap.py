@@ -737,7 +737,8 @@ def compute_soap_density(
     chunk_size_r=0, 
     chunk_size_p=0, 
     radial_basis='GTO', 
-    gaussian_sigma=0.5
+    gaussian_sigma=0.5,
+    projection_matrix=None
 ):
     """
         Compute SOAP density
@@ -750,15 +751,18 @@ def compute_soap_density(
             and n_species is the number of environment species 
             (see reshape_soaps)
         cutoff: environment cutoff
-        r_grid: grid on which to compute the GTOs
+        r_grid: grid on which to compute the radial basis functions
         p_grid: grid on which to compute the Legendre polynomials
-        n_max: maximum order of the radial GTO
+        n_max: maximum order of the radial basis functions
         l_max: maximum order of the Legendre polynomials.
             If None, do density for radial spectrum
         chunk_size_r: if > 0, compute density in GTO-grid-based chunks
         chunk_size_p: if > 0, compute density in Legendre-polynomial-based chunks
         radial_basis: which radial basis to use ('GTO' or 'DVR')
         gaussian_sigma: Gaussian width for DVR polynomials
+        projection_matrix: projection matrix for transforming
+            the radial basis functions into the optimal basis functions.
+            Should have the shape (n_species, full_n_max, contracted_n_max)
 
         ---Returns---
         density: SOAP reconstructed density with shape
@@ -771,10 +775,15 @@ def compute_soap_density(
     if radial_basis == 'GTO':
         R_n = orthogonalized_gto(cutoff, n_max, r_grid)
     elif radial_basis == 'DVR':
-        R_n = dvr(cutoff, n_max, gaussian_sigma, r_grid)
+        R_n = legendre_dvr(cutoff, n_max, gaussian_sigma, r_grid)
     else:
         print("Error: radial_basis must be one of 'GTO' or 'DVR'")
         return
+
+    if projection_matrix is not None:
+        R_n = np.swapaxes(projection_matrix, -2, -1) @ R_n
+    else:
+        R_n = np.reshape(R_n, (1, *R_n.shape))
 
     # Set up the grid-based chunking to speed
     # up the density computation and reduce memory requirements
@@ -794,16 +803,22 @@ def compute_soap_density(
             
         for n in range(0, n_chunks_r):
             slice_n = slice(n * chunk_size_r, (n + 1) * chunk_size_r, 1)
-            r_n = R_n[:, slice_n]
-            density[:, :, slice_n] = np.tensordot(soaps, r_n, axes=1)
+            r_n = R_n[..., slice_n]
+
+            # c: atomic center index
+            # s: species index
+            # n: radial index
+            # r: real-space grid index
+            density[..., slice_n] = np.einsum(
+                'csn,snr->csr', soaps, r_n, optimize=True
+            )
     
     # Do power spectrum
     else:
         l_grid = np.arange(0, l_max + 1)
 
         # Compute Legendre polynomials, shape (l_max+1, len(p_grid))
-        P_l = legendre_polynomials(l_grid[:, np.newaxis],
-                                   p_grid[np.newaxis, :])
+        P_l = eval_legendre(l_grid[:, np.newaxis], p_grid[np.newaxis, :])
     
         if chunk_size_p <= 0:
             n_chunks_p = 1
@@ -814,8 +829,10 @@ def compute_soap_density(
                 n_chunks_p += 1
                 
         # Compute the density in grid-based chunks
-        density = np.zeros((soaps.shape[0], soaps.shape[1], 
-                            len(r_grid), len(r_grid), len(p_grid)))
+        density = np.zeros((
+            soaps.shape[0], soaps.shape[1], 
+            len(r_grid), len(r_grid), len(p_grid)
+        ))
             
         for n in range(0, n_chunks_r):
             for m in range(0, n_chunks_r):
@@ -823,11 +840,32 @@ def compute_soap_density(
                     slice_n = slice(n * chunk_size_r, (n + 1) * chunk_size_r, 1)
                     slice_m = slice(m * chunk_size_r, (m + 1) * chunk_size_r, 1)
                     slice_p = slice(p * chunk_size_r, (p + 1) * chunk_size_p, 1)
-                    r_n = np.reshape(R_n[:, slice_n], (n_max, 1, 1, -1, 1, 1))
-                    r_m = np.reshape(R_n[:, slice_m], (1, n_max, 1, 1, -1, 1))
-                    p_l = np.reshape(P_l[:, slice_p], (1, 1, l_max + 1, 1, 1, -1))
-                    density[:, :, slice_n, slice_m, slice_p] = \
-                            np.tensordot(soaps, r_n * r_m * p_l, axes=3)
+
+                    # Since the (optimized) radial functions correspond
+                    # to distinct species channels,
+                    # and the power spectrum considers only unique
+                    # species pairs, we must compute
+                    # the radial combinations by hand
+                    spi = 0
+                    for i in range(0, R_n.shape[1]):
+                        for j in range(i, R_n.shape[1]):
+
+                            # n: radial index 1
+                            # x: radial grid index 1
+                            # m: radial index 2
+                            # y: radial grid index 2
+                            # l: angular index
+                            # z: angular grid index
+                            # c: atomic center index
+                            density[:, spi, slice_n, slice_m, slice_p] = np.einsum(
+                                'nx,my,lz,cnml->cxyz',
+                                R_n[i, :, slice_n],
+                                R_n[j, :, slice_m],
+                                P_l[:, slice_p],
+                                soaps[:, spi, ...],
+                                optimize=True
+                            )
+                            spi += 1
                 
     return density
 
