@@ -248,52 +248,44 @@ def quippy_soap(
 
         return soaps
 
-# TODO: make Z optional -- if not given, use all species
-# TODO: pass all SOAP parameters as kwargs? Then need to
-# find a way to reliably write all parameters to the HDF5 attributes
-def librascal_soap(structures, Z, max_radial=6, max_angular=6, 
-        interaction_cutoff=3.0, cutoff_smooth_width=0.5,
-        gaussian_sigma_constant=0.5, soap_type='PowerSpectrum', 
-        cutoff_function_type='ShiftedCosine', gaussian_sigma_type='Constant',
-        radial_basis='GTO', expansion_by_species_method='environment wise',
-        global_species=None, compute_gradients=False,
-        inversion_symmetry=True, normalize=True,
-        optimization_args={}, cutoff_function_parameters={},
-        coefficient_subselection=None,
-        average=False, component_idxs=None, concatenate=False, 
-        chunks=None, output=None):
+def librascal_soap(
+    structures, 
+    interaction_cutoff, 
+    cutoff_smooth_width,
+    max_radial, 
+    max_angular, 
+    gaussian_sigma_type,
+    center_species=None,
+    representation='SphericalInvariants',
+    average=False, 
+    component_idxs=None, 
+    concatenate=False, 
+    chunks=None, 
+    output=None,
+    **kwargs
+):
     """
         Compute SOAP vectors with Librascal
 
         ---Arguments---
         structures: list of ASE Atoms objects
-        Z: list of central atom species (atomic number)
-            All species are used as environment atoms
         max_radial: number of radial basis functions
         max_angular: highest angular momentum number in spherical harmonics expansion
-        cutoff: radial cutoff
-        cutoff_width: distance the cutoff is smoothed to zero
-        gaussian_sigma_constant: atomic Gaussian widths
-        soap_type: type of representation
-        cutoff_function_type: type of cutoff function
-        gaussian_sigma_type: fixed atomic Gaussian widths ('Constant'),
-            vary by species ('PerSpecies'), 
-            or vary by distance from the central atom ('Radial')
-        radial_basis: basis to use for the radial part
-        inversion_symmetry: enforce inversion variance
-        normalize: normalize SOAP vectors
-        compute_gradients: compute gradients of the SOAP vectors
-        expansion_by_species_method: setup of the species
-        global_species: list of species that will obey the species setup
-        cutoff_function_parameters: additional parameters for the cutoff function
-        optimization_args: optimization parameters
-        coefficient_subselection: list of species, n, and l indicies to select
+        interaction_cutoff: radial cutoff
+        cutoff_smooth_width: distance the cutoff is smoothed to zero
+        gaussian_sigma_type: method for assigning the widths of the
+            atom-centered Gaussians
+        center_species: list of central atom species (atomic number)
+            All species are used as environment atoms
+        representation: feature representation to use: 
+            'SphericalInvariants' or 'SphericalExpansion'
         average: average SOAP vectors over the central atoms in a structure
         component_idxs: indices of SOAP components to retain; 
             discard all other components
         concatenate: concatenate SOAP vectors from all structures into a single array
         chunks: if concatenate is True, chunk shape for HDF5
         output: output file for hdf5
+        kwargs: additional keyword arguments for the representation
 
         ---Returns---
         soaps: (if output=None) soap vectors
@@ -301,44 +293,59 @@ def librascal_soap(structures, Z, max_radial=6, max_angular=6,
     """
 
     # Center and wrap the frames
-    # TODO: need safeguard for concatenate=True,
-    # where an error is raised if not all structures
-    # have the same species
     structures_copy = deepcopy(structures)
     species_list = []
+    if center_species is not None:
+        center_species_list = center_species
+    else:
+        center_species_list = []
+
     for structure in structures_copy:
         structure.center()
         structure.wrap(eps=1.0E-12)
-
-        # Mask central atoms
-        mask_center_atoms_by_species(structure, species_select=Z)
 
         # Extract environment species
         structure_species = np.unique(structure.numbers)
         species_list.extend(np.setdiff1d(structure_species, species_list))
 
+        # (Positive) mask central atoms
+        if center_species is not None:
+            mask_center_atoms_by_species(
+                structure, species_select=center_species
+            )
+
+        # Track center atom species
+        else:
+            center_species_list.extend(
+                np.setdiff1d(structure_species, center_species_list)
+            )
+
     species_list.sort()
 
     # Setup the descriptor
-    descriptor = SphericalInvariants(
-        soap_type=soap_type,
-        max_radial=max_radial,
-        max_angular=max_angular,
-        interaction_cutoff=interaction_cutoff,
-        cutoff_smooth_width=cutoff_smooth_width,
-        cutoff_function_type=cutoff_function_type,
-        gaussian_sigma_constant=gaussian_sigma_constant,
-        gaussian_sigma_type=gaussian_sigma_type,
-        radial_basis=radial_basis,
-        global_species=global_species,
-        expansion_by_species_method=expansion_by_species_method,
-        normalize=normalize,
-        inversion_symmetry=inversion_symmetry,
-        compute_gradients=compute_gradients,
-        optimization_args=optimization_args,
-        cutoff_function_parameters=cutoff_function_parameters,
-        coefficient_subselection=coefficient_subselection
-    )
+    if representation == 'SphericalInvariants':
+        descriptor = SphericalInvariants(
+            interaction_cutoff=interaction_cutoff,
+            cutoff_smooth_width=cutoff_smooth_width,
+            max_radial=max_radial,
+            max_angular=max_angular,
+            gaussian_sigma_type=gaussian_sigma_type,
+            **kwargs
+        )
+    elif representation == 'SphericalExpansion':
+        descriptor = SphericalExpansion(
+            interaction_cutoff=interaction_cutoff,
+            cutoff_smooth_width=cutoff_smooth_width,
+            max_radial=max_radial,
+            max_angular=max_angular,
+            gaussian_sigma_type=gaussian_sigma_type,
+            **kwargs
+        )
+    else:
+        raise ValueError(
+            "Invalid representation: "
+            "use 'SphericalInvariants' or 'SphericalExpansion'"
+        )
 
     # Write SOAP vectors to file
     if output is not None:
