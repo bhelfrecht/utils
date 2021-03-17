@@ -45,14 +45,31 @@ def _truncate_average(soap, component_idxs=None, average=False):
 
 # TODO: make Z and species_Z optional arguments, where if not given
 # they default to all species
-def quippy_soap(structures, Z, species_Z, n_max=6, l_max=6, cutoff=3.0, 
-        cutoff_transition_width=0.5, atom_sigma=0.1,
-        cutoff_scale=1.0, cutoff_rate=1.0, cutoff_dexp=0,
-        covariance_sigma0=0.0, central_weight=1.0, basis_error_exponent=10.0,
-        normalise=True, central_reference_all_species=False, 
-        diagonal_radial=False, quippy_average=False,
-        average=False, component_idxs=None, concatenate=False, 
-        chunks=None, output=None):
+def quippy_soap(
+    structures, 
+    Z, 
+    species_Z, 
+    n_max=6, 
+    l_max=6, 
+    cutoff=3.0,     
+    cutoff_transition_width=0.5, 
+    atom_sigma=0.1,
+    cutoff_scale=1.0, 
+    cutoff_rate=1.0, 
+    cutoff_dexp=0,
+    covariance_sigma0=0.0, 
+    central_weight=1.0, 
+    basis_error_exponent=10.0,
+    normalise=True, 
+    central_reference_all_species=False, 
+    diagonal_radial=False, 
+    quippy_average=False,
+    average=False, 
+    component_idxs=None, 
+    concatenate=False, 
+    chunks=None, 
+    output=None
+):
     """
         Compute SOAP vectors with quippy
         (see https://libatoms.github.io/QUIP/descriptors.html)
