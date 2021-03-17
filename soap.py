@@ -588,21 +588,7 @@ def orthogonalized_gto(cutoff, n_max, r_grid):
 
     return R_n
 
-def legendre_polynomials(l, x):
-    """
-        Evaluate Legendre Polynomials
-
-        ---Arguments---
-        l: order of the Legendre polynomial
-        x: grid on which to compute the legendre polynomials,
-            must be on [-1, 1]
-
-        ---Returns---
-        P_l: Legendre polynomial of order l computed on the provided grid
-    """
-    return eval_legendre(l, x)
-
-def dvr(cutoff, n_max, gaussian_sigma, r_grid):
+def legendre_dvr(cutoff, n_max, gaussian_sigma, r_grid):
     """
         Compute DVR polynomials
 
@@ -624,34 +610,32 @@ def dvr(cutoff, n_max, gaussian_sigma, r_grid):
         R_n: DVR radial basis functions
     """
 
-    pts, wts, _ = roots_legendre(n_max)
+    legendre_points, legendre_weights = roots_legendre(n_max)
     
+    # Normalize grid to [-1, 1]
     grid_cutoff = cutoff + 3 * gaussian_sigma
-    # TODO: check that the cutoff and normalization to [-1, 1] is correct
-    # TODO: must r_grid already have the correct cutoff?
     grid = (r_grid - grid_cutoff / 2) / (grid_cutoff / 2)
 
-    legendre_polynomials = [
-        np.sqrt((2 * n + 1) / 2) * legendre(n) for n in range(0, n_max)
-    ]
+    prefactor = np.array([np.sqrt((2 * n + 1) / 2) for n in range(0, n_max)])
 
-    # TODO: clean this up, double for loop over shape of T
-    T = np.array(
-        [
-            [
-                np.sqrt(wts[n]) * legendre_polynomials[m](pts[n]) 
-                for n in range(0, n_max)
-            ] 
-            for m in range(0, n_max)
-        ]
+    # Transformation matrix
+    # `eval_legendre` is supposedly more stable than
+    # evaluating the polynomial objects when using high degree
+    T = np.zeros((n_max, n_max))
+    for n in range(0, n_max):
+        for m in range(0, n_max):
+            T[n, m] = (
+                np.sqrt(legendre_weights[m]) 
+                * prefactor[n] * eval_legendre(n, legendre_points[m])
+            )
+
+    # Evaluate legendre polynomials on the grid
+    legendre_values = np.array(
+        [prefactor[n] * eval_legendre(n, grid) for n in range(0, n_max)]
     )
 
-    legendre_polynomials = np.array([
-        legendre_polynomials[n](grid) for n in range(0, n_max)
-    ])
-
-    # TODO: get shape
-    R_n = T.T @ legendre_polynomials
+    # Compute DVRs, shape (n_max, len(r_grid))
+    R_n = T.T @ legendre_values
     return R_n
 
 def reshape_soaps(soaps, n_pairs, n_max, l_max=None):
