@@ -706,25 +706,26 @@ def reshape_soaps(soaps, n_pairs, n_max, l_max=None):
             If None, reshapes SOAPs for the radial spectrum
 
         ---Returns---
-        soap: reshaped SOAP with shape 
+        soaps: reshaped SOAP with shape 
             (n_centers, n_pairs, n_max, n_max, l_max+1)
             for the power spectrum, or shape 
             (n_centers, n_pairs, n_max) for the radial spectrum
     """
     
+    if soaps.ndim == 1: 
+        n_centers = 1
+    else:
+        n_centers = soaps.shape[0]
+
     # Reshape for power spectrum
     if l_max is not None:
-        if soaps.ndim == 1:
-            return np.reshape(soaps, (1, n_pairs, n_max, n_max, l_max+1))
-        else:
-            return np.reshape(soaps, (soaps.shape[0], n_pairs, n_max, n_max, l_max+1))
+        soaps = np.reshape(soaps, (n_centers, n_pairs, n_max, n_max, l_max+1))
 
     # Reshape for radial spectrum
     else:
-        if soaps.ndim == 1:
-            return np.reshape(soaps, (1, n_pairs, n_max))
-        else:
-            return np.reshape(soaps, (soaps.shape[0], n_pairs, n_max))
+        soaps = np.reshape(soaps, (n_centers, n_pairs, n_max))
+
+    return soaps
 
 def compute_soap_density(
     soaps, 
