@@ -638,6 +638,53 @@ def legendre_dvr(cutoff, n_max, gaussian_sigma, r_grid):
     R_n = T.T @ legendre_values
     return R_n
 
+def reshape_expansion(coefficients, n_species, n_max, l_max, split_l=False):
+    """
+        Reshape a set of expansion coefficients
+        to have the shape (n_centers, n_species, n_max, l_max + 1, 2 * l_max + 1)
+        if split_l is True, or 
+        to have the shape (n_centers, n_species, n_max, (l_max + 1) ** 2)
+        if split_l is False
+
+        ---Arguments---
+        coefficients: the coefficients to reshape
+        n_species: the number of species
+        n_max: the maximum number of radial functions
+        l_max: the maximum number of angular functions
+        split_l: whether to split the angular numbers into groups.
+            The angular axis is split into two, where
+            [..., i, :] are the features corresponding
+            to (-i, -i + 1, ..., -1, 0, 1, ..., i - 1, i)
+
+        ---Returns---
+        coefficients: reshaped coefficients
+            with shape (n_centers, n_species, n_max, l_max + 1, 2 * l_max + 1)
+            if split_l is True, or
+            with shape (n_centers, n_species, n_max, (l_max + 1) ** 2)
+            if split_l is False
+    """
+    if coefficients.ndim == 1:
+        n_centers = 1
+    else:
+        n_centers = coefficients.shape[0]
+
+    coefficients = np.reshape(
+        coefficients, (n_centers, n_species, n_max, (l_max + 1) ** 2)
+    )
+
+    if split_l:
+        split_coefficients = np.zeros((
+            n_centers, n_species, n_max, l_max + 1, 2 * l_max + 1
+        ))
+        for l in range(0, l_max + 1):
+            split_coefficients[..., l, 0:2 * l + 1] = (
+                coefficients[..., l ** 2: (l + 1) ** 2]
+            )
+
+        coefficients = split_coefficients
+
+    return coefficients
+
 def reshape_soaps(soaps, n_pairs, n_max, l_max=None):
     """
         Reshape a SOAP vector to have the shape
