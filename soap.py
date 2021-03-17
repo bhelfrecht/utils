@@ -8,7 +8,7 @@ from scipy.linalg import fractional_matrix_power
 from scipy.special import gamma, roots_legendre, eval_legendre
 from quippy.descriptors import Descriptor
 import h5py
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from rascal.representations import SphericalInvariants, SphericalExpansion
 from rascal.neighbourlist.structure_manager import mask_center_atoms_by_species
 import itertools
@@ -290,6 +290,7 @@ def librascal_soap(
     concatenate=False, 
     chunks=None, 
     output=None,
+    progress_bar=True,
     **kwargs
 ):
     """
@@ -313,12 +314,15 @@ def librascal_soap(
         concatenate: concatenate SOAP vectors from all structures into a single array
         chunks: if concatenate is True, chunk shape for HDF5
         output: output file for hdf5
+        progress_bar: show computation progress
         kwargs: additional keyword arguments for the representation
 
         ---Returns---
         soaps: (if output=None) soap vectors
         output: (if output is not None) output hdf5 file
     """
+
+    tqdm_disable = not progress_bar
 
     # Center and wrap the frames
     structures_copy = deepcopy(structures)
@@ -421,7 +425,9 @@ def librascal_soap(
             )
 
             n = 0
-            for sdx, structure in enumerate(tqdm(structures_copy)):
+            for sdx, structure in enumerate(tqdm(
+                structures_copy, disable=tqdm_disable
+            )):
                 soap_rep = descriptor.transform(structure)
                 soap = soap_rep.get_features(descriptor)
                 soap = _truncate_average(soap, component_idxs=component_idxs,
@@ -431,7 +437,9 @@ def librascal_soap(
                 dataset[n:n + len(soap)] = soap
                 n += len(soap)
         else:
-            for sdx, structure in enumerate(tqdm(structures_copy)):
+            for sdx, structure in enumerate(tqdm(
+                structures_copy, disable=tqdm_disable
+            )):
                 soap_rep = descriptor.transform(structure)
                 soap = soap_rep.get_features(descriptor)
                 soap = _truncate_average(soap, component_idxs=component_idxs,
@@ -448,7 +456,7 @@ def librascal_soap(
         soaps = []    
 
         # Compute SOAP vectors
-        for structure in tqdm(structures_copy):
+        for structure in tqdm(structures_copy, disable=tqdm_disable):
             soap_rep = descriptor.transform(structure)
             soap = soap_rep.get_features(descriptor)
             soap = _truncate_average(soap, component_idxs=component_idxs,
