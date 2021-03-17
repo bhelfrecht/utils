@@ -5,18 +5,46 @@ import sys
 import numpy as np
 from copy import deepcopy
 from scipy.linalg import fractional_matrix_power
-from scipy.special import gamma, legendre, roots_legendre, eval_legendre
+from scipy.special import gamma, roots_legendre, eval_legendre
 from quippy.descriptors import Descriptor
 import h5py
 from tqdm import tqdm
-from rascal.representations import SphericalInvariants
+from rascal.representations import SphericalInvariants, SphericalExpansion
 from rascal.neighbourlist.structure_manager import mask_center_atoms_by_species
 import itertools
 from ase.neighborlist import neighbor_list
 
-# TODO: multiprocessing on computing soaps and writing
-# TODO: decide one or multiple hdf5 files, take multiprocessing
-# into account
+def _flatten_dict(dictionary, key_prefix='', key_delimiter=':'):
+    """
+        Function to collapse nested dictionaries for
+        writing as HDF5 attributes
+
+        ---Arguments---
+        dictionary: dictionary to collapse
+        key_prefix: prefix for nested keys
+        key_delimiter: delimiter for nested keys
+
+        ---Returns---
+        dictionary: 'flattened' dictionary where
+            keys have the format `key1:key2: ... :keyN`,
+            where `:` is the key delimiter
+    """
+    items = []
+    for key, value in dictionary.items():
+        key = str(key)
+        if key_prefix:
+            new_key = key_prefix + key_delimiter + key
+        else:
+            new_key = key
+
+        if isinstance(value, dict):
+            items.extend(_flatten_dict(
+                value, key_prefix=new_key, key_delimiter=key_delimiter
+            ).items())
+        else:
+            items.append((new_key, value))
+
+    return dict(items)
 
 def _truncate_average(soap, component_idxs=None, average=False):
     """
@@ -356,17 +384,12 @@ def librascal_soap(
         # Add metadata
         # Have to set attributes individually;
         # can't set as a whole dictonary at once
-        h.attrs['Z'] = Z 
-        for key, value in descriptor._get_init_params().items():
-            if isinstance(value, dict):
-                for subkey, subvalue in value.items():
-                    h.attrs[f'{key}:{subkey}'] = subvalue
-            else:
-                h.attrs[key] = value
-        # TODO: remove `coefficient_subselection` once it makes its way into _get_init_params
-        if coefficient_subselection is None:
-            coefficient_subselection = []
-        h.attrs['coefficient_subselection'] = coefficient_subselection
+        hyperparameters = _flatten_dict(descriptor._get_init_params())
+        for key, value in hyperparameters.items():
+            h.attrs[key] = value
+
+        h.attrs['center_species'] = center_species_list
+        h.attrs['environment_species'] = species_list
         h.attrs['average'] = average
         if component_idxs is not None:
             h.attrs['component_idxs'] = component_idxs
