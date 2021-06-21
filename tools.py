@@ -168,6 +168,30 @@ def recursive_convert(obj):
 
     return obj
 
+def recursive_array_convert(obj):
+    """
+        Go through a collection
+        (dict, list, etc.) and convert all
+        lists to numpy arrays
+
+        ---Arguments---
+        obj: The object to convert
+
+        ---Returns---
+        obj: The object with all lists 
+            converted to numpy arrays
+    """
+
+    # Convert tuples to list before continuing
+    if isinstance(obj, list):
+        obj = np.array(obj)
+
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            obj[k] = recursive_array_convert(v)
+
+    return obj
+
 def save_json(json_object, output, array_convert=False):
     """
         JSONify an object
@@ -184,7 +208,7 @@ def save_json(json_object, output, array_convert=False):
     json_object = deepcopy(json_object)
 
     if array_convert:
-        recursive_convert(json_object)
+        json_object = recursive_convert(json_object)
 
     if output.endswith('.gz'):
         with gzip.GzipFile(output, 'w') as f:
