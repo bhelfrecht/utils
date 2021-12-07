@@ -6,7 +6,7 @@ import numpy as np
 from copy import deepcopy
 from scipy.linalg import fractional_matrix_power
 from scipy.special import gamma, roots_legendre, eval_legendre
-from quippy.descriptors import Descriptor
+#from quippy.descriptors import Descriptor
 import h5py
 from tqdm.auto import tqdm
 from rascal.representations import SphericalInvariants, SphericalExpansion
@@ -73,208 +73,208 @@ def _truncate_average(soap, component_idxs=None, average=False):
 
 # TODO: make Z and species_Z optional arguments, where if not given
 # they default to all species
-def quippy_soap(
-    structures, 
-    Z, 
-    species_Z, 
-    n_max=6, 
-    l_max=6, 
-    cutoff=3.0,     
-    cutoff_transition_width=0.5, 
-    atom_sigma=0.1,
-    cutoff_scale=1.0, 
-    cutoff_rate=1.0, 
-    cutoff_dexp=0,
-    covariance_sigma0=0.0, 
-    central_weight=1.0, 
-    basis_error_exponent=10.0,
-    normalise=True, 
-    central_reference_all_species=False, 
-    diagonal_radial=False, 
-    quippy_average=False,
-    average=False, 
-    component_idxs=None, 
-    concatenate=False, 
-    chunks=None, 
-    output=None
-):
-    """
-        Compute SOAP vectors with quippy
-        (see https://libatoms.github.io/QUIP/descriptors.html)
-
-        ---Arguments---
-        structures: list of ASE atoms objects
-        Z: list of central atom species (as atomic number)
-        species_Z: list of environment atom species (as atomic number)
-        n_max: number of radial basis functions
-        l_max: spherical harmonics basis band limit
-        cutoff: radial cutoff
-        cutoff_transition_width: cutoff transition width
-        atom_sigma: width of atomic Gaussians
-        cutoff_scale: cutoff decay scale
-        cutoff_rate: cutoff decay rate
-        cutoff_dexp: cutoff decay exponent
-        covariance_sigma0: polynomial covariance parameter
-        central_weight: weight of central atom
-        basis_error_exponent: 10^(-x), difference between target and expansion
-        normalise: normalize the SOAP vectors
-        quippy_average: compute average of SOAP vectors with quippy 
-            (one per Atoms object)
-        average: compute average of SOAP vectors over central atoms
-        central_reference_all_species: use Gaussian reference for all species
-        diagonal_radial: return only n1 = n2 elements of power spectrum
-        component_idxs: indices of SOAP components to retain
-        concatenate: concatenate SOAP vectors from all structures into a single array
-        chunks: if concatenate is True, chunk shape for HDF5
-        output: output file for hdf5
-
-        ---Returns---
-        soaps: (if output=None) soap vectors
-        output: (if output is not None) output hdf5 file
-    """
-    
-    # Number of central atom species
-    n_Z = len(Z)
-
-    # Number of environment species
-    n_species_Z = len(species_Z)
-
-    # Central atom species
-    Z_list = [str(ZZ) for ZZ in Z]
-    Z_str = "{{{:s}}}".format(' '.join(Z_list))
-
-    # Environment species
-    species_Z_list = [str(zz) for zz in species_Z]
-    species_Z_str = "{{{:s}}}".format(' '.join(species_Z_list))
-
-    # Build string of SOAP parameters
-    soap_str = [
-        "soap",
-        f"Z={Z_str:s}",
-        f"n_Z={n_Z:d}",
-        f"species_Z={species_Z_str:s}",
-        f"n_species={n_species_Z:d}",
-        f"n_max={n_max:d}",
-        f"l_max={l_max:d}",
-        f"cutoff={cutoff:f}",
-        f"cutoff_transition_width={cutoff_transition_width:f}",
-        f"atom_sigma={atom_sigma:f}",
-        f"cutoff_scale={cutoff_scale:f}",
-        f"cutoff_rate={cutoff_rate:f}",
-        f"cutoff_dexp={cutoff_dexp:d}",
-        f"covariance_sigma0={covariance_sigma0:f}",
-        f"central_weight={central_weight:f}",
-        f"basis_error_exponent={basis_error_exponent:f}",
-        f"normalise={normalise:s}",
-        f"average={quippy_average:s}",
-        f"central_reference_all_species={central_reference_all_species:s}",
-        f"diagonal_radial={diagonal_radial:s}"
-    ]
-    soap_str = ' '.join(soap_str)
-
-    # Setup the descriptor
-    descriptor = Descriptor(soap_str)
-
-    # Write SOAP vectors to file
-    if output is not None:
-
-        # Initialize HDF5
-        h = h5py.File(output, mode='w')
-
-        # Add metadata
-        # Have to set attributes individually;
-        # can't set as a whole dictonary at once
-        # TODO: do quippy descriptors have accessible parameter dictionaries?
-        h.attrs['Z'] = Z 
-        h.attrs['n_Z'] = n_Z
-        h.attrs['species_Z'] = species_Z 
-        h.attrs['n_species'] = n_species_Z
-        h.attrs['n_max'] = n_max
-        h.attrs['l_max'] = l_max
-        h.attrs['cutoff'] = cutoff
-        h.attrs['cutoff_transition_width'] = cutoff_transition_width
-        h.attrs['atom_sigma'] = atom_sigma
-        h.attrs['cutoff_scale'] = cutoff_scale
-        h.attrs['cutoff_rate'] = cutoff_rate
-        h.attrs['cutoff_dexp'] = cutoff_dexp
-        h.attrs['covariance_sigma0'] = covariance_sigma0
-        h.attrs['central_weight'] = central_weight
-        h.attrs['basis_error_exponent'] = basis_error_exponent
-        h.attrs['normalise'] = normalise
-        h.attrs['quippy_average'] = quippy_average
-        h.attrs['central_reference_all_species'] = \
-                central_reference_all_species 
-        h.attrs['diagonal_radial'] = diagonal_radial
-        h.attrs['average'] = average
-        if component_idxs is not None:
-            h.attrs['component_idxs'] = component_idxs
-        else:
-            h.attrs['component_idxs'] = 'all'
-
-        # Number of digits for structure numbers
-        n_digits = len(str(len(structures) - 1))
-
-        # Compute SOAP vectors
-        if concatenate:
-            if component_idxs is not None:
-                n_features = len(component_idxs)
-            else:
-                n_features = descriptor.ndim
-
-            if average or quippy_average:
-                n_centers = len(structures)
-            else:
-                n_centers = 0
-                for z in Z:
-                    n_centers += np.sum(
-                        [np.count_nonzero(s.numbers == z) for s in structures]
-                    )
-
-            dataset = h.create_dataset(
-                '0', shape=(n_centers, n_features), 
-                chunks=chunks, dtype='float64'
-            )
-
-            n = 0
-            for sdx, structure in enumerate(tqdm(structures)):
-                soap = descriptor.calc(structure,
-                        cutoff=descriptor.cutoff())['data']
-                soap = _truncate_average(soap, component_idxs=component_idxs,
-                        average=average)
-                if soap.ndim == 1:
-                    soap = np.reshape(soap, (1, -1))
-                dataset[n:n + len(soap)] = soap
-                n += len(soap)
-
-        else:
-            for sdx, structure in enumerate(tqdm(structures)):
-                soap = descriptor.calc(structure, 
-                        cutoff=descriptor.cutoff())['data']
-                soap = _truncate_average(soap, component_idxs=component_idxs,
-                        average=average)
-                dataset = h.create_dataset(str(sdx).zfill(n_digits), data=soap)
-
-        # Close output file
-        h.close()
-
-        return output
-
-    # SOAP vectors in memory
-    else:
-        soaps = [] 
-
-        # Compute SOAP vectors
-        for structure in tqdm(structures):
-            soap = descriptor.calc(structure, 
-                    cutoff=descriptor.cutoff())['data']
-            soap = _truncate_average(soap, component_idxs=component_idxs,
-                    average=average)
-            soaps.append(soap)
-
-        if concatenate:
-            soaps = np.vstack(soaps)
-
-        return soaps
+#def quippy_soap(
+#    structures, 
+#    Z, 
+#    species_Z, 
+#    n_max=6, 
+#    l_max=6, 
+#    cutoff=3.0,     
+#    cutoff_transition_width=0.5, 
+#    atom_sigma=0.1,
+#    cutoff_scale=1.0, 
+#    cutoff_rate=1.0, 
+#    cutoff_dexp=0,
+#    covariance_sigma0=0.0, 
+#    central_weight=1.0, 
+#    basis_error_exponent=10.0,
+#    normalise=True, 
+#    central_reference_all_species=False, 
+#    diagonal_radial=False, 
+#    quippy_average=False,
+#    average=False, 
+#    component_idxs=None, 
+#    concatenate=False, 
+#    chunks=None, 
+#    output=None
+#):
+#    """
+#        Compute SOAP vectors with quippy
+#        (see https://libatoms.github.io/QUIP/descriptors.html)
+#
+#        ---Arguments---
+#        structures: list of ASE atoms objects
+#        Z: list of central atom species (as atomic number)
+#        species_Z: list of environment atom species (as atomic number)
+#        n_max: number of radial basis functions
+#        l_max: spherical harmonics basis band limit
+#        cutoff: radial cutoff
+#        cutoff_transition_width: cutoff transition width
+#        atom_sigma: width of atomic Gaussians
+#        cutoff_scale: cutoff decay scale
+#        cutoff_rate: cutoff decay rate
+#        cutoff_dexp: cutoff decay exponent
+#        covariance_sigma0: polynomial covariance parameter
+#        central_weight: weight of central atom
+#        basis_error_exponent: 10^(-x), difference between target and expansion
+#        normalise: normalize the SOAP vectors
+#        quippy_average: compute average of SOAP vectors with quippy 
+#            (one per Atoms object)
+#        average: compute average of SOAP vectors over central atoms
+#        central_reference_all_species: use Gaussian reference for all species
+#        diagonal_radial: return only n1 = n2 elements of power spectrum
+#        component_idxs: indices of SOAP components to retain
+#        concatenate: concatenate SOAP vectors from all structures into a single array
+#        chunks: if concatenate is True, chunk shape for HDF5
+#        output: output file for hdf5
+#
+#        ---Returns---
+#        soaps: (if output=None) soap vectors
+#        output: (if output is not None) output hdf5 file
+#    """
+#    
+#    # Number of central atom species
+#    n_Z = len(Z)
+#
+#    # Number of environment species
+#    n_species_Z = len(species_Z)
+#
+#    # Central atom species
+#    Z_list = [str(ZZ) for ZZ in Z]
+#    Z_str = "{{{:s}}}".format(' '.join(Z_list))
+#
+#    # Environment species
+#    species_Z_list = [str(zz) for zz in species_Z]
+#    species_Z_str = "{{{:s}}}".format(' '.join(species_Z_list))
+#
+#    # Build string of SOAP parameters
+#    soap_str = [
+#        "soap",
+#        f"Z={Z_str:s}",
+#        f"n_Z={n_Z:d}",
+#        f"species_Z={species_Z_str:s}",
+#        f"n_species={n_species_Z:d}",
+#        f"n_max={n_max:d}",
+#        f"l_max={l_max:d}",
+#        f"cutoff={cutoff:f}",
+#        f"cutoff_transition_width={cutoff_transition_width:f}",
+#        f"atom_sigma={atom_sigma:f}",
+#        f"cutoff_scale={cutoff_scale:f}",
+#        f"cutoff_rate={cutoff_rate:f}",
+#        f"cutoff_dexp={cutoff_dexp:d}",
+#        f"covariance_sigma0={covariance_sigma0:f}",
+#        f"central_weight={central_weight:f}",
+#        f"basis_error_exponent={basis_error_exponent:f}",
+#        f"normalise={normalise:s}",
+#        f"average={quippy_average:s}",
+#        f"central_reference_all_species={central_reference_all_species:s}",
+#        f"diagonal_radial={diagonal_radial:s}"
+#    ]
+#    soap_str = ' '.join(soap_str)
+#
+#    # Setup the descriptor
+#    descriptor = Descriptor(soap_str)
+#
+#    # Write SOAP vectors to file
+#    if output is not None:
+#
+#        # Initialize HDF5
+#        h = h5py.File(output, mode='w')
+#
+#        # Add metadata
+#        # Have to set attributes individually;
+#        # can't set as a whole dictonary at once
+#        # TODO: do quippy descriptors have accessible parameter dictionaries?
+#        h.attrs['Z'] = Z 
+#        h.attrs['n_Z'] = n_Z
+#        h.attrs['species_Z'] = species_Z 
+#        h.attrs['n_species'] = n_species_Z
+#        h.attrs['n_max'] = n_max
+#        h.attrs['l_max'] = l_max
+#        h.attrs['cutoff'] = cutoff
+#        h.attrs['cutoff_transition_width'] = cutoff_transition_width
+#        h.attrs['atom_sigma'] = atom_sigma
+#        h.attrs['cutoff_scale'] = cutoff_scale
+#        h.attrs['cutoff_rate'] = cutoff_rate
+#        h.attrs['cutoff_dexp'] = cutoff_dexp
+#        h.attrs['covariance_sigma0'] = covariance_sigma0
+#        h.attrs['central_weight'] = central_weight
+#        h.attrs['basis_error_exponent'] = basis_error_exponent
+#        h.attrs['normalise'] = normalise
+#        h.attrs['quippy_average'] = quippy_average
+#        h.attrs['central_reference_all_species'] = \
+#                central_reference_all_species 
+#        h.attrs['diagonal_radial'] = diagonal_radial
+#        h.attrs['average'] = average
+#        if component_idxs is not None:
+#            h.attrs['component_idxs'] = component_idxs
+#        else:
+#            h.attrs['component_idxs'] = 'all'
+#
+#        # Number of digits for structure numbers
+#        n_digits = len(str(len(structures) - 1))
+#
+#        # Compute SOAP vectors
+#        if concatenate:
+#            if component_idxs is not None:
+#                n_features = len(component_idxs)
+#            else:
+#                n_features = descriptor.ndim
+#
+#            if average or quippy_average:
+#                n_centers = len(structures)
+#            else:
+#                n_centers = 0
+#                for z in Z:
+#                    n_centers += np.sum(
+#                        [np.count_nonzero(s.numbers == z) for s in structures]
+#                    )
+#
+#            dataset = h.create_dataset(
+#                '0', shape=(n_centers, n_features), 
+#                chunks=chunks, dtype='float64'
+#            )
+#
+#            n = 0
+#            for sdx, structure in enumerate(tqdm(structures)):
+#                soap = descriptor.calc(structure,
+#                        cutoff=descriptor.cutoff())['data']
+#                soap = _truncate_average(soap, component_idxs=component_idxs,
+#                        average=average)
+#                if soap.ndim == 1:
+#                    soap = np.reshape(soap, (1, -1))
+#                dataset[n:n + len(soap)] = soap
+#                n += len(soap)
+#
+#        else:
+#            for sdx, structure in enumerate(tqdm(structures)):
+#                soap = descriptor.calc(structure, 
+#                        cutoff=descriptor.cutoff())['data']
+#                soap = _truncate_average(soap, component_idxs=component_idxs,
+#                        average=average)
+#                dataset = h.create_dataset(str(sdx).zfill(n_digits), data=soap)
+#
+#        # Close output file
+#        h.close()
+#
+#        return output
+#
+#    # SOAP vectors in memory
+#    else:
+#        soaps = [] 
+#
+#        # Compute SOAP vectors
+#        for structure in tqdm(structures):
+#            soap = descriptor.calc(structure, 
+#                    cutoff=descriptor.cutoff())['data']
+#            soap = _truncate_average(soap, component_idxs=component_idxs,
+#                    average=average)
+#            soaps.append(soap)
+#
+#        if concatenate:
+#            soaps = np.vstack(soaps)
+#
+#        return soaps
 
 def librascal_soap(
     structures, 
