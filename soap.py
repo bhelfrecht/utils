@@ -284,6 +284,7 @@ def librascal_soap(
     max_angular, 
     gaussian_sigma_type,
     center_species=None,
+    environment_species=None,
     representation='SphericalInvariants',
     average=False, 
     component_idxs=None, 
@@ -305,7 +306,10 @@ def librascal_soap(
         gaussian_sigma_type: method for assigning the widths of the
             atom-centered Gaussians
         center_species: list of central atom species (atomic number)
-            All species are used as environment atoms
+            If None, all species are considered as centers
+        environment_species: list of atom species (atomic number)
+            to include in the local environment.
+            If None, all species are considered as part of the local environment
         representation: feature representation to use: 
             'SphericalInvariants' or 'SphericalExpansion'
         average: average SOAP vectors over the central atoms in a structure
@@ -326,7 +330,12 @@ def librascal_soap(
 
     # Center and wrap the frames
     structures_copy = deepcopy(structures)
-    species_list = []
+
+    if environment_species is not None:
+        environment_species_list = environment_species
+    else:
+        environment_species_list = []
+
     if center_species is not None:
         center_species_list = center_species
     else:
@@ -337,8 +346,11 @@ def librascal_soap(
         structure.wrap(eps=1.0E-12)
 
         # Extract environment species
-        structure_species = np.unique(structure.numbers)
-        species_list.extend(np.setdiff1d(structure_species, species_list))
+        if environment_species is None:
+            structure_species = np.unique(structure.numbers)
+            environment_species_list.extend(
+                np.setdiff1d(structure_species, environment_species_list)
+            )
 
         # (Positive) mask central atoms
         if center_species is not None:
@@ -352,7 +364,7 @@ def librascal_soap(
                 np.setdiff1d(structure_species, center_species_list)
             )
 
-    species_list.sort()
+    environment_species_list.sort()
 
     # Setup the descriptor
     if representation == 'SphericalInvariants':
@@ -393,7 +405,7 @@ def librascal_soap(
             h.attrs[key] = value
 
         h.attrs['center_species'] = center_species_list
-        h.attrs['environment_species'] = species_list
+        h.attrs['environment_species'] = environment_species_list
         h.attrs['average'] = average
         if component_idxs is not None:
             h.attrs['component_idxs'] = component_idxs
@@ -408,13 +420,13 @@ def librascal_soap(
             if component_idxs is not None:
                 n_features = len(component_idxs)
             else:
-                n_features = descriptor.get_num_coefficients(len(species_list))
+                n_features = descriptor.get_num_coefficients(len(environment_species_list))
 
             if average:
                 n_centers = len(structures)
             else:
                 n_centers = 0
-                for z in Z:
+                for z in center_species_list:
                     n_centers += np.sum(
                         [np.count_nonzero(s.numbers == z) for s in structures]
                     )
@@ -425,25 +437,23 @@ def librascal_soap(
             )
 
             n = 0
-            for sdx, structure in enumerate(tqdm(
-                structures_copy, disable=tqdm_disable
-            )):
+            for sdx, structure in enumerate(tqdm(structures_copy, disable=tqdm_disable)):
                 soap_rep = descriptor.transform(structure)
-                soap = soap_rep.get_features(descriptor)
-                soap = _truncate_average(soap, component_idxs=component_idxs,
-                        average=average)
+                soap = soap_rep.get_features(descriptor, species=environment_species_list)
+                soap = _truncate_average(
+                    soap, component_idxs=component_idxs, average=average
+                )
                 if soap.ndim == 1:
                     soap = np.reshape(soap, (1, -1))
                 dataset[n:n + len(soap)] = soap
                 n += len(soap)
         else:
-            for sdx, structure in enumerate(tqdm(
-                structures_copy, disable=tqdm_disable
-            )):
+            for sdx, structure in enumerate(tqdm(structures_copy, disable=tqdm_disable)):
                 soap_rep = descriptor.transform(structure)
-                soap = soap_rep.get_features(descriptor)
-                soap = _truncate_average(soap, component_idxs=component_idxs,
-                        average=average)
+                soap = soap_rep.get_features(descriptor, species=environment_species_list)
+                soap = _truncate_average(
+                    soap, component_idxs=component_idxs, average=average
+                )
                 dataset = h.create_dataset(str(sdx).zfill(n_digits), data=soap)
 
         # Close output file
@@ -458,9 +468,10 @@ def librascal_soap(
         # Compute SOAP vectors
         for structure in tqdm(structures_copy, disable=tqdm_disable):
             soap_rep = descriptor.transform(structure)
-            soap = soap_rep.get_features(descriptor)
-            soap = _truncate_average(soap, component_idxs=component_idxs,
-                    average=average)
+            soap = soap_rep.get_features(descriptor, species=environment_species_list)
+            soap = _truncate_average(
+                soap, component_idxs=component_idxs, average=average
+            )
             soaps.append(soap)
 
         if concatenate:
