@@ -110,12 +110,13 @@ def sorted_eigh(X, k=None, tiny=None):
 
     return U, V
 
-def load_json(json_file):
+def load_json(json_file, array_convert=False):
     """
         Shorthand for loading a JSON file
 
         ---Arguments---
         json_file: JSON file to load
+        array_convert: convert all lists to numpy arrays
 
         ---Returns---
         json_object: object read from the JSON file
@@ -127,6 +128,9 @@ def load_json(json_file):
     else:
         with open(json_file, 'r') as f:
             json_object = json.load(f)
+
+    if array_convert:
+        recursive_array_convert(json_object)
 
     return json_object
 
