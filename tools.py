@@ -241,3 +241,81 @@ def save_structured_array(output, array, dtype):
     header = ' '.join(header)
     np.savetxt(f'{output}', np.hstack(columns), header=header)
 
+def save_hdf5(filename, data, chunks=None, attrs={}):
+    """
+        Save an array or list of arrays to an HDF5 file
+
+        ---Arguments---
+        filename: name of the file in which to save the data
+        data: data to save. If a list of arrays, saves each
+            array as a separate dataset in a top-level group.
+            Otherwise just saves the array as a dataset
+        attrs: dictionary of attributes to add to the HDF5 file
+    """
+
+    f = h5py.File(filename, 'w')
+
+    if isinstance(data, list):
+        n_digits = len(str(len(data) - 1))
+        for ddx, d in enumerate(data):
+
+            # Don't need `track_order=True` because
+            # we create datasets with names in alphanumeric order
+            f.create_dataset(str(ddx).zfill(n_digits), data=d)
+    else:
+        f.create_dataset('0', data=data, chunks=chunks)
+
+    # Add attributes
+    for k, v in attrs.items():
+        if v is None:
+            f.attrs[k] = 'None'
+        else:
+            f.attrs[k] = v
+
+    f.close()
+
+def load_hdf5(filename, datasets=None, indices=None, concatenate=False):
+    """
+        Load data from an HDF5 file
+
+        ---Arguments---
+        filename: name of the HDF5 file to load from
+        datasets: list of dataset names to load data from.
+            If None, loads all datasets.
+        indices: list of (arrays of) indices to load from each dataset.
+            If None, loads all data from the selected datasets.
+            Can be provided as a tuple for multidimensional
+            numpy indexing.
+        concatenate: whether to concatenate the loaded datasets
+            into a single array. If only one dataset is present,
+            the data array is returned instead of a single-element list.
+        ---Returns---
+        dataset_values: data loaded from the HDF5 file
+    """
+
+    dataset_values = []
+
+    f = h5py.File(filename, 'r')
+
+    if datasets is None:
+
+        # f.keys() returns a view, so to get the actual
+        # names we need list comprehension
+        datasets = [key for key in f.keys()]
+
+    if indices is None:
+        indices = [slice(None)] * len(datasets)
+    elif isinstance(indices, np.ndarray):
+        indices = [indices]
+
+    for dataset_name, idxs in zip(datasets, indices):
+        dataset_values.append(f[dataset_name][idxs])
+
+    f.close()
+
+    if concatenate:
+        dataset_values = np.vstack(dataset_values)
+    elif len(dataset_values) == 1:
+        dataset_values = dataset_values[0]
+
+    return dataset_values
